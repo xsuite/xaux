@@ -46,16 +46,16 @@ def get_hash(filename, size=128):
 def get_fstat(filename):
     stats = Path(filename).stat()
     return {
-                'n_sequence_fields': stats.n_sequence_fields,
-                'n_unnamed_fields':  stats.n_unnamed_fields,
-                'st_mode':           stats.st_mode,
-                'st_ino':            stats.st_ino,
-                'st_dev':            stats.st_dev,
-                'st_uid':            stats.st_uid,
-                'st_gid':            stats.st_gid,
-                'st_size':           stats.st_size,
-                'st_mtime_ns':       stats.st_mtime_ns,
-                'st_ctime_ns':       stats.st_ctime_ns,
+                'n_sequence_fields': int(stats.n_sequence_fields),
+                'n_unnamed_fields':  int(stats.n_unnamed_fields),
+                'st_mode':           int(stats.st_mode),
+                'st_ino':            int(stats.st_ino),
+                'st_dev':            int(stats.st_dev),
+                'st_uid':            int(stats.st_uid),
+                'st_gid':            int(stats.st_gid),
+                'st_size':           int(stats.st_size),
+                'st_mtime_ns':       int(stats.st_mtime_ns),
+                'st_ctime_ns':       int(stats.st_ctime_ns),
             }
 
 class ProtectFile:
@@ -207,7 +207,6 @@ class ProtectFile:
             if self._exists:
                 raise FileExistsError
 
-        
         # Provide an expected running time (to free a file in case of crash)
         max_lock_time = arg.pop('max_lock_time', None)
         if max_lock_time is not None and self._readonly == False \
@@ -302,14 +301,20 @@ class ProtectFile:
         # Check that original file was not modified in between (i.e. corrupted)
         # TODO: verify that checking file stats is 1) enough, and 2) not
         #       potentially problematic on certain file systems
-        if self._exists and get_fstat(self.file) != self._fstat:
+        file_changed = False
+        if self._exists:
+            new_stats = get_fstat(self.file)
+            for key, val in self._fstat.items():
+                if key not in new_stats or val != new_stats[key]:
+                    file_changed = True
+        if file_changed:
             print(f"Error: File {self.file} changed during lock!")
             # If corrupted, restore from backup
             # and move result of calculation (i.e. tempfile) to the parent folder
             print("Old stats:")
             print(self._fstat)
             print("New stats:")
-            print(get_fstat(self.file))
+            print(new_stats)
             self.restore()
         else:
             # All is fine: move result from temporary file to original
