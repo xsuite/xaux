@@ -118,14 +118,14 @@ class ProtectFile:
     --------
     Reading in a file (while making sure it is not written to by another process):
 
-    >>> from protectfile import ProtectedFile
-    >>> with ProtectedFile('thebook.txt', 'r', backup=False, wait=1) as pf:
+    >>> from protectfile import ProtectFile
+    >>> with ProtectFile('thebook.txt', 'r', backup=False, wait=1) as pf:
     >>>    text = pf.read()
 
     Reading and appending to a file:
 
-    >>> from protectfile import ProtectedFile
-    >>> with ProtectedFile('thebook.txt', 'r+', backup=False, wait=1) as pf:
+    >>> from protectfile import ProtectFile
+    >>> with ProtectFile('thebook.txt', 'r+', backup=False, wait=1) as pf:
     >>>    text = pf.read()
     >>>    pf.write("This string will be added at the end of the file, \
     ...               however, it won't be added to the 'text' variable")
@@ -133,8 +133,8 @@ class ProtectFile:
     Reading and updating a JSON file:
 
     >>> import json
-    >>> from protectfile import ProtectedFile
-    >>> with ProtectedFile(info.json, 'r+', backup=False, wait=1) as pf:
+    >>> from protectfile import ProtectFile
+    >>> with ProtectFile(info.json, 'r+', backup=False, wait=1) as pf:
     >>>     meta = json.load(pf)
     >>>     meta.update({'author': 'Emperor Claudius'})
     >>>     pf.truncate(0)          # Delete file contents (to avoid appending)
@@ -144,13 +144,21 @@ class ProtectFile:
     Reading and updating a Parquet file:
 
     >>> import pandas as pd
-    >>> from protectfile import ProtectedFile
-    >>> with ProtectedFile(mydata.parquet, 'r+b', backup=False, wait=1) as pf:
+    >>> from protectfile import ProtectFile
+    >>> with ProtectFile(mydata.parquet, 'r+b', backup=False, wait=1) as pf:
     >>>     data = pd.read_parquet(pf)
     >>>     data['x'] += 5
     >>>     pf.truncate(0)          # Delete file contents (to avoid appending)
     >>>     pf.seek(0)              # Move file pointer to start of file
     >>>     data.to_parquet(pf, index=True)
+    
+    Reading and updating a json file in EOS with xrdcp:
+
+    >>> from protectfile import ProtectFile
+    >>> eos_url = 'root://eosuser.cern.ch/'
+    >>> fname = '/eos/user/k/kparasch/test.json'
+    >>> with ProtectFile(fname, 'r+', eos_url=eos_url) as pf:
+    >>>     pass
     """
 
     def __init__(self, *args, **kwargs):
