@@ -56,7 +56,6 @@ def test_deliberate_failure():
 
 @pytest.mark.parametrize("with_copy", [False, True])
 def test_protection(with_copy):
-    print(with_copy)
     fname = "test_protection.json"
     assert not Path(fname).exists()
     init_file(fname)
