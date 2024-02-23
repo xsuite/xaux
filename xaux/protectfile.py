@@ -408,8 +408,8 @@ class ProtectFile:
             self.backupfile.rename(self.file)
             print('Restored file to previous state.')
         if not self._readonly:
+            extension = f"__{datetime.datetime.now().isoformat()}.result"
             if self._eos_url is not None:
-                extension = f"__{datetime.datetime.now().isoformat()}.result"
                 alt_file = self.original_eos_path + extension
             else:
                 alt_file = Path(self.file.parent, self.file.name + extension).resolve()
