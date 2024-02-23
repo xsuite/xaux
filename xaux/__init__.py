@@ -4,3 +4,4 @@
 # ######################################### #
 
 from .general import _pkg_root, __version__
+from .protectfile import ProtectFile, get_hash
