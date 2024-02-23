@@ -251,7 +251,7 @@ class ProtectFile:
                                 self._flock = io.open(self.lockfile, 'r+')
                                 break
                     else:
-                        raise RunTimeError("Too many lockfiles!")
+                        raise RuntimeError("Too many lockfiles!")
 
         # Store lock information
         if max_lock_time is not None:
