@@ -207,12 +207,15 @@ class ProtectFile:
             self._do_backup = True
         self._backup_if_readonly = arg.pop('backup_if_readonly', False)
         self._check_hash = arg.pop('check_hash', True)
-
+        
+        # Make sure conditions are satisfied when using EOS-XRDCP
         self._eos_url = arg.pop('eos_url', None)
         if self._eos_url is not None:
             self.original_eos_path = arg['file']
+            if self._do_backup or self._backup_if_readonly:
+                raise NotImplementedError("Backup not supported with eos_url.")
             if not self._eos_url.startswith("root://eos") or not self._eos_url.endswith('.cern.ch/'):
-                raise NotImplementedError(f'Invalid EOS url provided: {self._eos_url}')
+                raise NotImplementedError(f'Invalid EOS url provided: {self._eos_url=}')
             if not str(self.original_eos_path).startswith("/eos"):
                 raise NotImplementedError(f'Only /eos paths are supported with eos_url.')
             if not xrdcp_installed():
@@ -315,7 +318,7 @@ class ProtectFile:
         if not self._readonly:
             if self._exists:
                 if self._eos_url is not None:
-                    _print_debug("Init", f"xrdcp {self.original_eos_path} to {self.tempfile=}")
+                    _print_debug("Init", f"xrdcp {self.original_eos_path=} to {self.tempfile=}")
                     self.xrdcp(self.original_eos_path, self.tempfile)
                 else:
                     _print_debug("Init", f"cp {self.file=} to {self.tempfile=}")
