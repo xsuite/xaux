@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xaux"
-version = "0.0.1"
+version = "0.1.0"
 description = "Support tools for Xsuite packages"
 authors = ["Frederik Van der Veken <frederik@cern.ch>"]
 license = "Apache 2.0"
