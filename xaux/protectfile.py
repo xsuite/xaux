@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import time
 import json
+import subprocess
 
 tempdir = tempfile.TemporaryDirectory()
 protected_open = {}
@@ -57,6 +58,17 @@ def get_fstat(filename):
                 'st_mtime_ns':       stats.st_mtime_ns,
                 'st_ctime_ns':       stats.st_ctime_ns,
             }
+
+def xrdcp_installed():
+    try:
+        cmd = subprocess.run(["xrdcp", "--version"], stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, check=True)
+        return cmd.returncode == 0
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+
 
 class ProtectFile:
     """A wrapper around a file pointer, protecting it with a lockfile and backups.
@@ -164,6 +176,8 @@ class ProtectFile:
         max_lock_time : float, default None
             If provided, it will write the maximum runtime in seconds inside the
             lockfile. This is to avoided crashed accesses locking the file forever.
+        eos_url : string, default None
+            If provided, it will use xrdcp to copy the temporary file to eos and back.
 
         Additionally, the following parameters are inherited from open():
             'file', 'mode', 'buffering', 'encoding', 'errors', 'newline', 'closefd', 'opener'
@@ -186,6 +200,17 @@ class ProtectFile:
         self._backup_if_readonly = arg.pop('backup_if_readonly', False)
         self._check_hash = arg.pop('check_hash', True)
 
+        self._eos_url = arg.pop('eos_url', None)
+        if self._eos_url is not None:
+            self.original_eos_path = arg['file']
+            if not self._eos_url.startswith("root://eos") or not self._eos_url.endswith('.cern.ch/'):
+                raise NotImplementedError(f'Invalid EOS url provided: {self._eos_url}')
+            if not str(self.original_eos_path).startswith("/eos"):
+                raise NotImplementedError(f'Only /eos paths are supported with eos_url.')
+            if not xrdcp_installed():
+                raise RuntimeError("xrdcp is not installed.")
+            self.original_eos_path = self._eos_url + self.original_eos_path
+
         # Initialise paths
         arg['file'] = Path(arg['file']).resolve()
         file = arg['file']
@@ -193,6 +218,7 @@ class ProtectFile:
         self._lock = Path(file.parent, file.name + '.lock').resolve()
         self._temp = Path(tempdir.name, file.name).resolve()
 
+         
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the backup and temporary files
         self._exists = True if self.file.is_file() else False
@@ -280,8 +306,12 @@ class ProtectFile:
         #       slow if many processes write to it concurrently
         if not self._readonly:
             if self._exists:
-                _print_debug("Init", f"cp {self.file=} to {self.tempfile=}")
-                shutil.copy2(self.file, self.tempfile)
+                if self._eos_url is not None:
+                    _print_debug("Init", f"xrdcp {self.original_eos_path} to {self.tempfile=}")
+                    self.xrdcp(self.original_eos_path, self.tempfile)
+                else:
+                    _print_debug("Init", f"cp {self.file=} to {self.tempfile=}")
+                    shutil.copy2(self.file, self.tempfile)
             arg['file'] = self.tempfile
         self._fd = io.open(**arg)
 
@@ -338,16 +368,24 @@ class ProtectFile:
         if not self._readonly:
             if destination is None:
                 # Move temporary file to original file
-                _print_debug("Mv_temp", f"cp {self.tempfile=} to {self.file=}")
-                shutil.copy2(self.tempfile, self.file)
+                if self._eos_url is not None:
+                    _print_debug("Mv_temp", f"xrdcp {self.tempfile=} to {self.original_eos_path=}")
+                    self.xrdcp(self.tempfile, self.original_eos_path)
+                else:   
+                    _print_debug("Mv_temp", f"cp {self.tempfile=} to {self.file=}")
+                    shutil.copy2(self.tempfile, self.file)
                 # Check if copy succeeded
                 if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
                     print(f"Warning: tried to copy temporary file {self.tempfile} into {self.file}, "
                           + "but hashes do not match!")
                     self.restore()
             else:
-                _print_debug("Mv_temp", f"cp {self.tempfile=} to {destination=}")
-                shutil.copy2(self.tempfile, destination)
+                if self._eos_url is not None:
+                    _print_debug("Mv_temp", f"xrdcp {self.tempfile=} to {destination=}")
+                    self.xrdcp(self.tempfile, destination)
+                else:   
+                    _print_debug("Mv_temp", f"cp {self.tempfile=} to {destination=}")
+                    shutil.copy2(self.tempfile, destination)
             _print_debug("Mv_temp", f"unlink {self.tempfile=}")
             self.tempfile.unlink()
 
@@ -359,8 +397,11 @@ class ProtectFile:
             self.backupfile.rename(self.file)
             print('Restored file to previous state.')
         if not self._readonly:
-            alt_file = Path(self.file.parent, self.file.name + '__' \
-                       + datetime.datetime.now().isoformat() + '.result').resolve()
+            if self._eos_url is not None:
+                extension = f"__{datetime.datetime.now().isoformat()}.result"
+                alt_file = self.original_eos_path + extension
+            else:
+                alt_file = Path(self.file.parent, self.file.name + extension).resolve()
             self.mv_temp(alt_file)
             print(f"Saved calculation results in {alt_file.name}.")
 
@@ -385,4 +426,14 @@ class ProtectFile:
             self.lockfile.unlink()
         if pop:
             protected_open.pop(self._file, 0)
+        
+    def xrdcp(self, source=None, destination=None):
+        if source is None or destination is None:
+            raise RuntimeError("Source or destination not specified in xrdcp command.")
+        if self._eos_url is None:
+            raise RuntimeError("self._eos_url is None, while it shouldn't have been.")
+
+        subprocess.run(["xrdcp", "-f", f"{str(source)}", f"{str(destination)}"],
+                       check=True)
+
 
