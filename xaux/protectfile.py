@@ -68,8 +68,6 @@ def xrdcp_installed():
         return False
 
 
-
-
 class ProtectFile:
     """A wrapper around a file pointer, protecting it with a lockfile and backups.
 
@@ -151,7 +149,7 @@ class ProtectFile:
     >>>     pf.truncate(0)          # Delete file contents (to avoid appending)
     >>>     pf.seek(0)              # Move file pointer to start of file
     >>>     data.to_parquet(pf, index=True)
-    
+
     Reading and updating a json file in EOS with xrdcp:
 
     >>> from protectfile import ProtectFile
@@ -207,7 +205,7 @@ class ProtectFile:
             self._do_backup = True
         self._backup_if_readonly = arg.pop('backup_if_readonly', False)
         self._check_hash = arg.pop('check_hash', True)
-        
+
         # Make sure conditions are satisfied when using EOS-XRDCP
         self._eos_url = arg.pop('eos_url', None)
         if self._eos_url is not None:
@@ -229,7 +227,6 @@ class ProtectFile:
         self._lock = Path(file.parent, file.name + '.lock').resolve()
         self._temp = Path(tempdir.name, file.name).resolve()
 
-         
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the backup and temporary files
         self._exists = True if self.file.is_file() else False
@@ -387,7 +384,7 @@ class ProtectFile:
                 if self._eos_url is not None:
                     _print_debug("Mv_temp", f"xrdcp {self.tempfile=} to {self.original_eos_path=}")
                     self.xrdcp(self.tempfile, self.original_eos_path)
-                else:   
+                else:
                     _print_debug("Mv_temp", f"cp {self.tempfile=} to {self.file=}")
                     shutil.copy2(self.tempfile, self.file)
                 # Check if copy succeeded
@@ -399,7 +396,7 @@ class ProtectFile:
                 if self._eos_url is not None:
                     _print_debug("Mv_temp", f"xrdcp {self.tempfile=} to {destination=}")
                     self.xrdcp(self.tempfile, destination)
-                else:   
+                else:
                     _print_debug("Mv_temp", f"cp {self.tempfile=} to {destination=}")
                     shutil.copy2(self.tempfile, destination)
             _print_debug("Mv_temp", f"unlink {self.tempfile=}")
@@ -442,7 +439,7 @@ class ProtectFile:
             self.lockfile.unlink()
         if pop:
             protected_open.pop(self._file, 0)
-        
+
     def xrdcp(self, source=None, destination=None):
         if source is None or destination is None:
             raise RuntimeError("Source or destination not specified in xrdcp command.")
