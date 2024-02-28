@@ -49,9 +49,9 @@ def test_deliberate_failure():
         pool.map(change_file_standard, [fname] * 4)
 
     with open(fname, "r+") as pf:
+        Path.unlink(Path(fname))
         data = json.load(pf)
         assert data["myint"] != workers  # assert that result is wrong
-    Path.unlink(Path(fname))
 
 
 @pytest.mark.parametrize("with_copy", [False, True])
@@ -64,6 +64,6 @@ def test_protection(with_copy):
         pool.map(change_file_protected, [(fname)] * 4)
 
     with open(fname, "r+") as pf:
+        Path.unlink(Path(fname))
         data = json.load(pf)
         assert data["myint"] == workers
-    Path.unlink(Path(fname))
