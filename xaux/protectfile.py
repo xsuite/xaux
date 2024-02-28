@@ -227,7 +227,7 @@ class ProtectFile:
         self._backup_if_readonly = arg.pop('backup_if_readonly', False)
 
         # Using a temporary file to write to
-        self._use_temporary = args.pop('use_temporary', True)
+        self._use_temporary = arg.pop('use_temporary', True)
         self._check_hash = arg.pop('check_hash', True)
 
         # Make sure conditions are satisfied when using EOS-XRDCP
