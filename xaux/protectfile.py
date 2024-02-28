@@ -19,13 +19,6 @@ import subprocess
 tempdir = tempfile.TemporaryDirectory()
 protected_open = {}
 
-# TODO: make more robust
-# Use debug flag below to inspect steps in file IO
-_debug = False
-
-def _print_debug(prc, msg):
-    if _debug:
-        print(prc,": ", msg, "\n")
 
 def exit_handler():
     """This handles cleaning of potential leftover lockfiles and backups."""
@@ -33,6 +26,7 @@ def exit_handler():
         file.release(pop=False)
     tempdir.cleanup()
 atexit.register(exit_handler)
+
 
 def get_hash(filename, size=128):
     """Get a fast hash of a file, in chunks of 'size' (in kb)"""
@@ -44,6 +38,9 @@ def get_hash(filename, size=128):
             h.update(mv[:n])
     return h.hexdigest()
 
+
+# TODO: there is some issue with the timestamps. Was this really a file
+#       corruption, or is this an OS issue that we don't care about?
 def get_fstat(filename):
     stats = Path(filename).stat()
     return {
@@ -58,6 +55,7 @@ def get_fstat(filename):
                 'st_mtime_ns':       int(stats.st_mtime_ns),
                 'st_ctime_ns':       int(stats.st_ctime_ns),
             }
+
 
 def xrdcp_installed():
     try:
@@ -159,6 +157,10 @@ class ProtectFile:
     >>>     pass
     """
 
+    # Use debug flag below to inspect steps in file IO
+    _debug = False
+
+
     def __init__(self, *args, **kwargs):
         """A ProtectFile object, to be used only in a context.
 
@@ -167,6 +169,9 @@ class ProtectFile:
         wait : float, default 1
             When a file is locked, the time to wait in seconds before trying to
             access it again.
+        use_temporary : bool, default True
+            Whether or not to perform writing operations on a termporary file.
+            Ignored when the file is read-only.
         backup_during_lock : bool, default False
             Whether or not to use a temporary backup file, to restore in case of
             failure.
@@ -189,13 +194,25 @@ class ProtectFile:
             'file', 'mode', 'buffering', 'encoding', 'errors', 'newline', 'closefd', 'opener'
         """
 
-        argnames_open = ['file', 'mode', 'buffering', 'encoding', 'errors', 'newline', 'closefd', 'opener']
+        # File variables
+        # ==============
+        # self._file:   path to the file to the protected file
+        # self._lock:   path to the lockfile
+        # self._flock:  file pointer to lockfile
+        # self._temp:   path to the temporary file on which write operations are applied
+        # self._fd:     file pointer to the main file
+        #               (self._file if readonly, self._temp if writing)
+        # self._backup: path to backup file
+
+        argnames_open = ['file', 'mode', 'buffering', 'encoding', 'errors', 'newline',
+                         'closefd', 'opener']
         arg = dict(zip(argnames_open, args))
         arg.update(kwargs)
 
         wait = arg.pop('wait', 1)
         # add some white noise to the wait time to avoid different processes syncing
         wait += abs(random.normalvariate(0, 1e-1*wait))
+
         # Backup during locking process (set to False for very big files)
         self._do_backup = arg.pop('backup_during_lock', False)
         # Keep backup even after unlocking
@@ -204,6 +221,9 @@ class ProtectFile:
         if self._keep_backup:
             self._do_backup = True
         self._backup_if_readonly = arg.pop('backup_if_readonly', False)
+
+        # Using a temporary file to write to
+        self._use_temporary = arg.pop('use_temporary', True)
         self._check_hash = arg.pop('check_hash', True)
 
         # Make sure conditions are satisfied when using EOS-XRDCP
@@ -227,6 +247,12 @@ class ProtectFile:
         self._lock = Path(file.parent, file.name + '.lock').resolve()
         self._temp = Path(tempdir.name, file.name).resolve()
 
+        # This is the level of nested lockfiles.
+        self._nesting_level = arg.pop('_nesting_level', 0)
+        if self._nesting_level > 0:
+            self._do_backup = False
+            self._use_temporary = False
+
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the backup and temporary files
         self._exists = True if self.file.is_file() else False
@@ -240,49 +266,50 @@ class ProtectFile:
         elif 'x' in mode:
             if self._exists:
                 raise FileExistsError
+        if self._readonly:
+            self._use_temporary = False
 
         # Provide an expected running time (to free a file in case of crash)
         max_lock_time = arg.pop('max_lock_time', None)
         if max_lock_time is not None and self._readonly == False \
-        and self._file.suffix != '.lock':
+        and self._nesting_level == 0:
             print("Warning: Using `max_lock_time` for non read-only "
-                + "files is dangerous! Are you sure this is what you want?")
+                + "files is dangerous! If the time is estimated wrongly "
+                + "and a file is freed while the original process is "
+                + "still running, file corruption WILL occur. Are you "
+                + "sure this is what you want?")
 
         # Try to make lockfile, wait if unsuccesful
         while True:
             try:
-                _print_debug("Init",f"open {self.lockfile}")
                 self._flock = io.open(self.lockfile, 'x')
+                self._print_debug("init",f"opened {self.lockfile}")
                 break
             except (IOError, OSError, FileExistsError):
-                _print_debug("Init", f"waiting {wait}s to create {self.lockfile}")
+                self._print_debug("init", f"waiting {wait}s to create {self.lockfile}")
                 time.sleep(wait)
                 if max_lock_time is not None:
                     # Check if the original process that locked the file
                     # might have crashed. If yes, this process can take over.
-                    # We are only allowed to do this for 10 iterations
-                    iteration = 0
-                    for suf in self.lockfile.suffixes:
-                        if suf == '.lock':
-                            iteration += 1
-                        else:
-                            iteration = 0
-                    if iteration < 10:
+                    # We are only allowed to do this for 10 locking iterations.
+                    if self._nesting_level < 10:
                         # Try to open the lock
-                        with ProtectFile(self.lockfile, 'r+', wait=0.1, \
-                                         max_lock_time=10) as pf:
-                            info = json.load(pf)
-                            if 'free_after' in info and info['free_after'] < time.time():
-                                # We free the original process
-                                # Note that we have to udpate the info in the lockfile
-                                # before freeing the lockfile!
-                                json.dump({
-                                    'free_after': time.time() + 2*max_lock_time
-                                }, pf)
-                                # We still have to provide the file pointer as the
-                                # original pointer failed with FileExistsError
-                                self._flock = io.open(self.lockfile, 'r+')
-                                break
+                        try:
+                            with ProtectFile(self.lockfile, 'r+', wait=0.1, \
+                                             _nesting_level=self._nesting_level+1, \
+                                             max_lock_time=10) as pf:
+                                info = json.load(pf)
+                                if 'free_after' in info and info['free_after'] < time.time():
+                                    # We free the original process by deleting the lockfile
+                                    # and then we go to the next step in the while loop.
+                                    # Note that this does not necessary imply this process
+                                    # gets to use the file; which is the intended behaviour
+                                    # (first one wins).
+                                    self.lockfile.unlink()
+                                    self._print_debug("init",f"freed {self.lockfile} because "
+                                                      + "of exceeding max lock time")
+                        except FileNotFoundError:
+                            pass
                     else:
                         raise RuntimeError("Too many lockfiles!")
 
@@ -291,33 +318,31 @@ class ProtectFile:
             json.dump({
                 'free_after': time.time() + 1.2*max_lock_time
             }, self._flock)
-            self._flock.close()
+            self._flock.close() # to make sure write is executed
 
         # Make a backup if requested
         if self._readonly and not self._backup_if_readonly:
             self._do_backup = False
         if self._do_backup and self._exists:
             self._backup = Path(file.parent, file.name + '.backup').resolve()
-            _print_debug("Init", f"cp {self.file=} to {self.backupfile=}")
+            self._print_debug("init", f"cp {self.file=} to {self.backupfile=}")
             shutil.copy2(self.file, self.backupfile)
         else:
             self._backup = None
 
         # Store stats (to check if file got corrupted later)
-        if self._exists:
+        if self._nesting_level == 0 and self._exists:
             self._fstat = get_fstat(self.file)
 
         # Choose file pointer:
         # To the temporary file if writing, or existing file if read-only
-        # TODO: if the original file is large, using a temporary file might be extremely
-        #       slow if many processes write to it concurrently
-        if not self._readonly:
+        if self._use_temporary:
             if self._exists:
                 if self._eos_url is not None:
-                    _print_debug("Init", f"xrdcp {self.original_eos_path=} to {self.tempfile=}")
+                    self._print_debug("init", f"xrdcp {self.original_eos_path=} to {self.tempfile=}")
                     self.xrdcp(self.original_eos_path, self.tempfile)
                 else:
-                    _print_debug("Init", f"cp {self.file=} to {self.tempfile=}")
+                    self._print_debug("init", f"cp {self.file=} to {self.tempfile=}")
                     shutil.copy2(self.file, self.tempfile)
             arg['file'] = self.tempfile
         self._fd = io.open(**arg)
@@ -337,10 +362,8 @@ class ProtectFile:
         if not self._fd.closed:
             self._fd.close()
         # Check that original file was not modified in between (i.e. corrupted)
-        # TODO: verify that checking file stats is 1) enough, and 2) not
-        #       potentially problematic on certain file systems
         file_changed = False
-        if self._exists:
+        if self._nesting_level == 0 and self._exists:
             new_stats = get_fstat(self.file)
             for key, val in self._fstat.items():
                 if key not in new_stats or val != new_stats[key]:
@@ -378,14 +401,15 @@ class ProtectFile:
 
     def mv_temp(self, destination=None):
         """Move temporary file to 'destination' (the original file if destination=None)"""
-        if not self._readonly:
+        if self._use_temporary:
             if destination is None:
                 # Move temporary file to original file
                 if self._eos_url is not None:
-                    _print_debug("Mv_temp", f"xrdcp {self.tempfile=} to {self.original_eos_path=}")
+                    self._print_debug("mv_temp", f"xrdcp {self.tempfile=} "
+                                 + f"to {self.original_eos_path=}")
                     self.xrdcp(self.tempfile, self.original_eos_path)
                 else:
-                    _print_debug("Mv_temp", f"cp {self.tempfile=} to {self.file=}")
+                    self._print_debug("mv_temp", f"cp {self.tempfile=} to {self.file=}")
                     shutil.copy2(self.tempfile, self.file)
                 # Check if copy succeeded
                 if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
@@ -394,22 +418,22 @@ class ProtectFile:
                     self.restore()
             else:
                 if self._eos_url is not None:
-                    _print_debug("Mv_temp", f"xrdcp {self.tempfile=} to {destination=}")
+                    self._print_debug("mv_temp", f"xrdcp {self.tempfile=} to {destination=}")
                     self.xrdcp(self.tempfile, destination)
                 else:
-                    _print_debug("Mv_temp", f"cp {self.tempfile=} to {destination=}")
+                    self._print_debug("mv_temp", f"cp {self.tempfile=} to {destination=}")
                     shutil.copy2(self.tempfile, destination)
-            _print_debug("Mv_temp", f"unlink {self.tempfile=}")
+            self._print_debug("mv_temp", f"unlink {self.tempfile=}")
             self.tempfile.unlink()
 
 
     def restore(self):
         """Restore the original file from backup and save calculation results"""
         if self._do_backup:
-            _print_debug("Restore", f"rename {self.backupfile} into {self.file}")
+            self._print_debug("restore", f"rename {self.backupfile} into {self.file}")
             self.backupfile.rename(self.file)
             print('Restored file to previous state.')
-        if not self._readonly:
+        if self._use_temporary:
             extension = f"__{datetime.datetime.now().isoformat()}.result"
             if self._eos_url is not None:
                 alt_file = self.original_eos_path + extension
@@ -423,22 +447,30 @@ class ProtectFile:
         """Clean up lockfile, tempfile, and backupfile"""
         # Overly verbose in checking, as to make sure this never fails
         # (to avoid being stuck with remnant lockfiles)
+
+        # Close main file pointer
         if hasattr(self,'_fd') and hasattr(self._fd,'closed') and not self._fd.closed:
             self._fd.close()
-        if hasattr(self,'_temp') and hasattr(self.tempfile,'is_file') and self.tempfile.is_file():
+        # Delete temporary file
+        if hasattr(self,'_temp') and hasattr(self._temp,'is_file') and self._temp.is_file():
             self.tempfile.unlink()
-        if hasattr(self,'_do_backup') and hasattr(self,'_backup') and \
-                hasattr(self.backupfile,'is_file') and hasattr(self,'_keep_backup') and \
-                self._do_backup and self.backupfile.is_file() and not self._keep_backup:
-            _print_debug("Release", f"unlink {self.backupfile}")
+        # Delete backup file
+        if hasattr(self,'_do_backup') and self._do_backup and \
+        hasattr(self,'_backup') and hasattr(self._backup,'is_file') and self._backup.is_file() and \
+        hasattr(self,'_keep_backup') and not self._keep_backup:
+            self._print_debug("release", f"unlink {self.backupfile}")
             self.backupfile.unlink()
+        # Close lockfile pointer
         if hasattr(self,'_flock') and hasattr(self._flock,'closed') and not self._flock.closed:
             self._flock.close()
-        if hasattr(self,'_lock') and hasattr(self.lockfile,'is_file') and self.lockfile.is_file():
-            _print_debug("Release", f"unlink {self.lockfile}")
+        # Delete lockfile
+        if hasattr(self,'_lock') and hasattr(self._lock,'is_file') and self._lock.is_file():
+            self._print_debug("release", f"unlink {self.lockfile}")
             self.lockfile.unlink()
+        # Remove file from the protected register
         if pop:
             protected_open.pop(self._file, 0)
+
 
     def xrdcp(self, source=None, destination=None):
         if source is None or destination is None:
@@ -449,4 +481,7 @@ class ProtectFile:
         subprocess.run(["xrdcp", "-f", f"{str(source)}", f"{str(destination)}"],
                        check=True)
 
+    def _print_debug(self, prc, msg):
+        if self._debug:
+            print(f"({self._file.name}) {prc}: {msg}\n")
 
