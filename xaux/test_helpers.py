@@ -24,6 +24,11 @@ def change_file_protected(fname, with_copy=False, max_lock_time=None):
         rewrite(pf, with_copy=with_copy)
     return
 
+def change_file_standard(fname, with_copy=False):
+    with open(fname, "r+") as pf:  # fails with this context
+        rewrite(pf)
+    return
+
 def init_file(fname):
     with ProtectFile(fname, "w", backup=False, wait=1) as pf:
         json.dump({"myint": 0}, pf, indent=4)
