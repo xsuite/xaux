@@ -2,7 +2,7 @@ import time
 import json
 from pathlib import Path
 import shutil
-from . import ProtectFile
+from xaux import ProtectFile
 
 ProtectFile._debug = True
 

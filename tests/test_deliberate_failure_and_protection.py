@@ -2,7 +2,7 @@ from multiprocessing import Pool
 import pytest
 import json
 from pathlib import Path
-from xaux.test_helpers import init_file, change_file_protected, change_file_standard
+from _test_helpers import init_file, change_file_protected, change_file_standard
 
 def test_deliberate_failure():
     fname = "test_standard.json"

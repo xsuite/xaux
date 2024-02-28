@@ -306,7 +306,8 @@ class ProtectFile:
                                     # gets to use the file; which is the intended behaviour
                                     # (first one wins).
                                     self.lockfile.unlink()
-                                    self._print_debug("init",f"freed {self.lockfile} because of exceeding max lock time")
+                                    self._print_debug("init",f"freed {self.lockfile} because "
+                                                      + "of exceeding max lock time")
                         except FileNotFoundError:
                             pass
                     else:
@@ -432,7 +433,7 @@ class ProtectFile:
             self._print_debug("restore", f"rename {self.backupfile} into {self.file}")
             self.backupfile.rename(self.file)
             print('Restored file to previous state.')
-        if not self._readonly:
+        if self._use_temporary:
             extension = f"__{datetime.datetime.now().isoformat()}.result"
             if self._eos_url is not None:
                 alt_file = self.original_eos_path + extension
