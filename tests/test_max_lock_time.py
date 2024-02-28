@@ -3,8 +3,9 @@ from pathlib import Path
 from xaux.test_helpers import init_file, change_file_protected
 from multiprocessing import Process
 
+
 def test_max_lock_time():
-    fname = "test_standard.json"
+    fname = "test_max_lock_time.json"
     assert not Path(fname).exists()
     init_file(fname)
 
