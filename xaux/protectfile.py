@@ -20,14 +20,6 @@ tempdir = tempfile.TemporaryDirectory()
 protected_open = {}
 
 
-# Use debug flag below to inspect steps in file IO
-_debug = False
-
-def _print_debug(protectfile, prc, msg):
-    if _debug:
-        print(f"({protectfile._file.name}) {prc}: {msg}\n")
-
-
 def exit_handler():
     """This handles cleaning of potential leftover lockfiles and backups."""
     for file in protected_open.values():
@@ -165,6 +157,10 @@ class ProtectFile:
     >>>     pass
     """
 
+    # Use debug flag below to inspect steps in file IO
+    _debug = False
+
+
     def __init__(self, *args, **kwargs):
         """A ProtectFile object, to be used only in a context.
 
@@ -287,10 +283,10 @@ class ProtectFile:
         while True:
             try:
                 self._flock = io.open(self.lockfile, 'x')
-                _print_debug(self, "init",f"opened {self.lockfile}")
+                self._print_debug("init",f"opened {self.lockfile}")
                 break
             except (IOError, OSError, FileExistsError):
-                _print_debug(self, "init", f"waiting {wait}s to create {self.lockfile}")
+                self._print_debug("init", f"waiting {wait}s to create {self.lockfile}")
                 time.sleep(wait)
                 if max_lock_time is not None:
                     # Check if the original process that locked the file
@@ -298,17 +294,21 @@ class ProtectFile:
                     # We are only allowed to do this for 10 locking iterations.
                     if self._nesting_level < 10:
                         # Try to open the lock
-                        with ProtectFile(self.lockfile, 'r+', wait=0.1, \
-                                         _nesting_level=self._nesting_level+1, \
-                                         max_lock_time=10) as pf:
-                            info = json.load(pf)
-                            if 'free_after' in info and info['free_after'] < time.time():
-                                # We free the original process by deleting the lockfile
-                                # and then we go to the next step in the while loop.
-                                # Note that this does not necessary imply this process
-                                # gets to use the file; which is the intended behaviour
-                                # (first one wins).
-                                self.lockfile.unlink()
+                        try:
+                            with ProtectFile(self.lockfile, 'r+', wait=0.1, \
+                                             _nesting_level=self._nesting_level+1, \
+                                             max_lock_time=10) as pf:
+                                info = json.load(pf)
+                                if 'free_after' in info and info['free_after'] < time.time():
+                                    # We free the original process by deleting the lockfile
+                                    # and then we go to the next step in the while loop.
+                                    # Note that this does not necessary imply this process
+                                    # gets to use the file; which is the intended behaviour
+                                    # (first one wins).
+                                    self.lockfile.unlink()
+                                    self._print_debug("init",f"freed {self.lockfile} because of exceeding max lock time")
+                        except FileNotFoundError:
+                            pass
                     else:
                         raise RuntimeError("Too many lockfiles!")
 
@@ -324,7 +324,7 @@ class ProtectFile:
             self._do_backup = False
         if self._do_backup and self._exists:
             self._backup = Path(file.parent, file.name + '.backup').resolve()
-            _print_debug(self, "init", f"cp {self.file=} to {self.backupfile=}")
+            self._print_debug("init", f"cp {self.file=} to {self.backupfile=}")
             shutil.copy2(self.file, self.backupfile)
         else:
             self._backup = None
@@ -338,10 +338,10 @@ class ProtectFile:
         if self._use_temporary:
             if self._exists:
                 if self._eos_url is not None:
-                    _print_debug(self, "init", f"xrdcp {self.original_eos_path=} to {self.tempfile=}")
+                    self._print_debug("init", f"xrdcp {self.original_eos_path=} to {self.tempfile=}")
                     self.xrdcp(self.original_eos_path, self.tempfile)
                 else:
-                    _print_debug(self, "init", f"cp {self.file=} to {self.tempfile=}")
+                    self._print_debug("init", f"cp {self.file=} to {self.tempfile=}")
                     shutil.copy2(self.file, self.tempfile)
             arg['file'] = self.tempfile
         self._fd = io.open(**arg)
@@ -404,11 +404,11 @@ class ProtectFile:
             if destination is None:
                 # Move temporary file to original file
                 if self._eos_url is not None:
-                    _print_debug(self, "mv_temp", f"xrdcp {self.tempfile=} "
+                    self._print_debug("mv_temp", f"xrdcp {self.tempfile=} "
                                  + f"to {self.original_eos_path=}")
                     self.xrdcp(self.tempfile, self.original_eos_path)
                 else:
-                    _print_debug(self, "mv_temp", f"cp {self.tempfile=} to {self.file=}")
+                    self._print_debug("mv_temp", f"cp {self.tempfile=} to {self.file=}")
                     shutil.copy2(self.tempfile, self.file)
                 # Check if copy succeeded
                 if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
@@ -417,19 +417,19 @@ class ProtectFile:
                     self.restore()
             else:
                 if self._eos_url is not None:
-                    _print_debug(self, "mv_temp", f"xrdcp {self.tempfile=} to {destination=}")
+                    self._print_debug("mv_temp", f"xrdcp {self.tempfile=} to {destination=}")
                     self.xrdcp(self.tempfile, destination)
                 else:
-                    _print_debug(self, "mv_temp", f"cp {self.tempfile=} to {destination=}")
+                    self._print_debug("mv_temp", f"cp {self.tempfile=} to {destination=}")
                     shutil.copy2(self.tempfile, destination)
-            _print_debug(self, "mv_temp", f"unlink {self.tempfile=}")
+            self._print_debug("mv_temp", f"unlink {self.tempfile=}")
             self.tempfile.unlink()
 
 
     def restore(self):
         """Restore the original file from backup and save calculation results"""
         if self._do_backup:
-            _print_debug(self, "restore", f"rename {self.backupfile} into {self.file}")
+            self._print_debug("restore", f"rename {self.backupfile} into {self.file}")
             self.backupfile.rename(self.file)
             print('Restored file to previous state.')
         if not self._readonly:
@@ -457,14 +457,14 @@ class ProtectFile:
         if hasattr(self,'_do_backup') and self._do_backup and \
         hasattr(self,'_backup') and hasattr(self._backup,'is_file') and self._backup.is_file() and \
         hasattr(self,'_keep_backup') and not self._keep_backup:
-            _print_debug(self, "release", f"unlink {self.backupfile}")
+            self._print_debug("release", f"unlink {self.backupfile}")
             self.backupfile.unlink()
         # Close lockfile pointer
         if hasattr(self,'_flock') and hasattr(self._flock,'closed') and not self._flock.closed:
             self._flock.close()
         # Delete lockfile
         if hasattr(self,'_lock') and hasattr(self._lock,'is_file') and self._lock.is_file():
-            _print_debug(self, "release", f"unlink {self.lockfile}")
+            self._print_debug("release", f"unlink {self.lockfile}")
             self.lockfile.unlink()
         # Remove file from the protected register
         if pop:
@@ -480,4 +480,7 @@ class ProtectFile:
         subprocess.run(["xrdcp", "-f", f"{str(source)}", f"{str(destination)}"],
                        check=True)
 
+    def _print_debug(self, prc, msg):
+        if self._debug:
+            print(f"({self._file.name}) {prc}: {msg}\n")
 
