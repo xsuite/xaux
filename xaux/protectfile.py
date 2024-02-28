@@ -298,17 +298,20 @@ class ProtectFile:
                     # We are only allowed to do this for 10 locking iterations.
                     if self._nesting_level < 10:
                         # Try to open the lock
-                        with ProtectFile(self.lockfile, 'r+', wait=0.1, \
-                                         _nesting_level=self._nesting_level+1, \
-                                         max_lock_time=10) as pf:
-                            info = json.load(pf)
-                            if 'free_after' in info and info['free_after'] < time.time():
-                                # We free the original process by deleting the lockfile
-                                # and then we go to the next step in the while loop.
-                                # Note that this does not necessary imply this process
-                                # gets to use the file; which is the intended behaviour
-                                # (first one wins).
-                                self.lockfile.unlink()
+                        try:
+                            with ProtectFile(self.lockfile, 'r+', wait=0.1, \
+                                             _nesting_level=self._nesting_level+1, \
+                                             max_lock_time=10) as pf:
+                                info = json.load(pf)
+                                if 'free_after' in info and info['free_after'] < time.time():
+                                    # We free the original process by deleting the lockfile
+                                    # and then we go to the next step in the while loop.
+                                    # Note that this does not necessary imply this process
+                                    # gets to use the file; which is the intended behaviour
+                                    # (first one wins).
+                                    self.lockfile.unlink()
+                        except FileNotFoundError:
+                            pass
                     else:
                         raise RuntimeError("Too many lockfiles!")
 
