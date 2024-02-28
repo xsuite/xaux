@@ -304,6 +304,10 @@ class ProtectFile:
                             info = json.load(pf)
                             if 'free_after' in info and info['free_after'] < time.time():
                                 # We free the original process by deleting the lockfile
+                                # and then we go to the next step in the while loop.
+                                # Note that this does not necessary imply this process
+                                # gets to use the file; which is the intended behaviour
+                                # (first one wins).
                                 self.lockfile.unlink()
                     else:
                         raise RuntimeError("Too many lockfiles!")
