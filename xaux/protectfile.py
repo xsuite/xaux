@@ -16,6 +16,12 @@ import time
 import json
 import subprocess
 
+
+LOCKFILE_NESTING_MAX_LEVEL = 5   # Max number of lockfiles to exist simultaneously
+LOCKFILE_NESTING_MAX_LOCK_TIME = 10
+LOCKFILE_NESTING_WAIT = 0.1
+
+
 tempdir = tempfile.TemporaryDirectory()
 protected_open = {}
 
@@ -159,6 +165,7 @@ class ProtectFile:
 
     # Use debug flag below to inspect steps in file IO
     _debug = False
+    _testing_nested = False
 
 
     def __init__(self, *args, **kwargs):
@@ -209,10 +216,6 @@ class ProtectFile:
         arg = dict(zip(argnames_open, args))
         arg.update(kwargs)
 
-        wait = arg.pop('wait', 1)
-        # add some white noise to the wait time to avoid different processes syncing
-        wait += abs(random.normalvariate(0, 1e-1*wait))
-
         # Backup during locking process (set to False for very big files)
         self._do_backup = arg.pop('backup_during_lock', False)
         # Keep backup even after unlocking
@@ -247,12 +250,6 @@ class ProtectFile:
         self._lock = Path(file.parent, file.name + '.lock').resolve()
         self._temp = Path(tempdir.name, file.name).resolve()
 
-        # This is the level of nested lockfiles.
-        self._nesting_level = arg.pop('_nesting_level', 0)
-        if self._nesting_level > 0:
-            self._do_backup = False
-            self._use_temporary = False
-
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the backup and temporary files
         self._exists = True if self.file.is_file() else False
@@ -269,6 +266,9 @@ class ProtectFile:
         if self._readonly:
             self._use_temporary = False
 
+        # This is the level of nested lockfiles.
+        self._nesting_level = arg.pop('_nesting_level', 0)
+
         # Provide an expected running time (to free a file in case of crash)
         max_lock_time = arg.pop('max_lock_time', None)
         if max_lock_time is not None and self._readonly == False \
@@ -279,11 +279,27 @@ class ProtectFile:
                 + "still running, file corruption WILL occur. Are you "
                 + "sure this is what you want?")
 
+        # Time to wait between trials to generate lockfile
+        wait = arg.pop('wait', 1)
+
+        # Override defaults in case of nested lockfiles
+        if self._nesting_level > 0:
+            self._do_backup = False
+            self._use_temporary = False
+            if self._testing_nested:
+                max_lock_time = 0.3  # only for tests
+            else:
+                max_lock_time = LOCKFILE_NESTING_MAX_LOCK_TIME
+            wait = LOCKFILE_NESTING_WAIT
+
+        # Add some white noise to the wait time to avoid different processes syncing
+        wait += abs(random.normalvariate(0, 1e-1*wait))
+
         # Try to make lockfile, wait if unsuccesful
         while True:
             try:
                 self._flock = io.open(self.lockfile, 'x')
-                self._print_debug("init",f"opened {self.lockfile}")
+                self._print_debug("init",f"created {self.lockfile}")
                 break
             except (IOError, OSError, FileExistsError):
                 self._print_debug("init", f"waiting {wait}s to create {self.lockfile}")
@@ -291,14 +307,16 @@ class ProtectFile:
                 if max_lock_time is not None:
                     # Check if the original process that locked the file
                     # might have crashed. If yes, this process can take over.
-                    # We are only allowed to do this for 10 locking iterations.
-                    if self._nesting_level < 10:
+                    # We are only allowed to do this for 5 locking iterations.
+                    if self._nesting_level < LOCKFILE_NESTING_MAX_LEVEL:
                         # Try to open the lock
                         try:
-                            with ProtectFile(self.lockfile, 'r+', wait=0.1, \
-                                             _nesting_level=self._nesting_level+1, \
-                                             max_lock_time=10) as pf:
+                            with ProtectFile(self.lockfile, 'r+',
+                                             _nesting_level=self._nesting_level+1) as pf:
                                 info = json.load(pf)
+                                if self._testing_nested:
+                                    # This is only for tests, to be able to kill the process
+                                    time.sleep(1)
                                 if 'free_after' in info and info['free_after'] < time.time():
                                     # We free the original process by deleting the lockfile
                                     # and then we go to the next step in the while loop.
@@ -307,8 +325,10 @@ class ProtectFile:
                                     # (first one wins).
                                     self.lockfile.unlink()
                                     self._print_debug("init",f"freed {self.lockfile} because "
-                                                      + "of exceeding max lock time")
+                                                      + "of exceeding max_lock_time")
                         except FileNotFoundError:
+                            # All is fine, the lockfile disappeared in the meanwhile.
+                            # Return to the while loop.
                             pass
                     else:
                         raise RuntimeError("Too many lockfiles!")
