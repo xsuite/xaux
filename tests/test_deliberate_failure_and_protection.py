@@ -48,7 +48,7 @@ def test_deliberate_failure():
     with Pool(processes=workers) as pool:
         pool.map(change_file_standard, [fname] * 4)
 
-    with open(fname, "r+") as pf:  # fails with this context
+    with open(fname, "r+") as pf:
         data = json.load(pf)
         assert data["myint"] != workers  # assert that result is wrong
     Path.unlink(Path(fname))
@@ -63,7 +63,7 @@ def test_protection(with_copy):
     with Pool(processes=workers) as pool:
         pool.map(change_file_protected, [(fname)] * 4)
 
-    with open(fname, "r+") as pf:  # fails with this context
+    with open(fname, "r+") as pf:
         data = json.load(pf)
         assert data["myint"] == workers
     Path.unlink(Path(fname))
