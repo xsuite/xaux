@@ -1,9 +1,11 @@
 #!/bin/bash
-
 # copyright ############################### #
 # This file is part of the Xaux Package.    #
 # Copyright (c) CERN, 2024.                 #
 # ######################################### #
+
+# Check necessary setup and installs
+gh pr list || exit 1
 
 if [ $# -eq 0 ]
 then
@@ -81,8 +83,12 @@ case ${answer:0:1} in
     ;;
 esac
 
-# Update version in a temporary branch
-poetry version $bump || (echo "Poetry version failed! Aborting..."; exit 1)
+# Kill script on first error
+set -e
+
+# Update version in the release branch
+echo "Poetry version bump..."
+poetry version $bump
 new_ver=$( poetry version | awk '{print $2;}' )
 if [[ "$new_ver" != "$expected_ver" ]]
 then
@@ -91,33 +97,30 @@ then
 fi
 sed -i "s/\(__version__ =\).*/\1 '"${new_ver}"'/"         xaux/general.py
 sed -i "s/\(assert __version__ ==\).*/\1 '"${new_ver}"'/" tests/test_version.py
+echo "Committing version change..."
 git reset
 git add pyproject.toml xaux/general.py tests/test_version.py
-git commit --no-verify -m "Updated version number to v"${new_ver}"." || (echo "Git commit version failed! Aborting..."; exit 1)
+git commit --no-verify -m "Updated version number to v"${new_ver}"."
 git push
 
 # Make and accept pull request
-gh pr create --base main --title "Release "${new_ver} --fill || (echo "gh pr create failed! Aborting..."; exit 1)
+echo "Creating and merging pull request..."
+gh pr create --base main --title "Release "${new_ver} --fill
 git switch main
 git pull
 PR=$( gh pr list --head $branch | tail -1 | awk '{print $1;}' )
-gh pr merge ${PR} --merge --admin --delete-branch || (echo "gh pr merge failed! Aborting..."; exit 1)
+gh pr merge ${PR} --merge --admin --delete-branch
 git pull
 
 # Make a tag
 git tag v${new_ver}
 git push origin v${new_ver}
 
-# Draft release notes
-curl \
-  -X POST \
-  -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer "$(cat ../github_token) \
-  https://api.github.com/repos/xsuite/xaux/releases \
-  -d '{"tag_name":"v'${new_ver}'","target_commitish":"main","name":"Xaux release '${new_ver}'","body":"","draft":true,"prerelease":false,"generate_release_notes":true}'
+# Draft release
+gh release create v${new_ver} --draft --generate-notes --title "Xaux release ${new_ver}" --verify-tag
 
 # Build release and publish to PyPi
 poetry publish --build
 
-
+echo "All done!"
 
