@@ -72,18 +72,18 @@ class ProtectFile:
     Use
     ---
     It is meant to be used inside a context, where the entering and leaving of a
-    context ensures the file protection. The moment the object is instantiated, a
+    context ensures file protection. The moment the object is instantiated, a
     lockfile is generated (which is destroyed after leaving the context). Attempts
     to access the file will be postponed as long as a lockfile exists. Furthermore,
     while in the context, file operations are done on a temporary file, that is
     only moved back when leaving the context.
 
-    The reason to lock read access as well, is that we might work with immutable
+    The reason to lock read access as well is that we might work with immutable
     files. The following scenario might happen: a file is read by process 1, some
     calculations are done by process 1, the file is read by process 2, and the
-    result of the calculations are written by process 1. Now process 2 is working
+    result of the calculations is written by process 1. Now process 2 is working
     on an outdated version of the file. Hence the full process should be locked in
-    one go: reading, manipulating/calculating, writing.
+    one go: reading, manipulating/calculating, and writing.
 
     An important caveat is that, after the manipulation/calculation, the file
     contents have to be wiped before writing, otherwise the contents will be
@@ -114,13 +114,13 @@ class ProtectFile:
     --------
     Reading in a file (while making sure it is not written to by another process):
 
-    >>> from protectfile import ProtectFile
+    >>> from xaux import ProtectFile
     >>> with ProtectFile('thebook.txt', 'r', backup=False, wait=1) as pf:
     >>>    text = pf.read()
 
     Reading and appending to a file:
 
-    >>> from protectfile import ProtectFile
+    >>> from xaux import ProtectFile
     >>> with ProtectFile('thebook.txt', 'r+', backup=False, wait=1) as pf:
     >>>    text = pf.read()
     >>>    pf.write("This string will be added at the end of the file, \
@@ -129,7 +129,7 @@ class ProtectFile:
     Reading and updating a JSON file:
 
     >>> import json
-    >>> from protectfile import ProtectFile
+    >>> from xaux import ProtectFile
     >>> with ProtectFile(info.json, 'r+', backup=False, wait=1) as pf:
     >>>     meta = json.load(pf)
     >>>     meta.update({'author': 'Emperor Claudius'})
@@ -140,7 +140,7 @@ class ProtectFile:
     Reading and updating a Parquet file:
 
     >>> import pandas as pd
-    >>> from protectfile import ProtectFile
+    >>> from xaux import ProtectFile
     >>> with ProtectFile(mydata.parquet, 'r+b', backup=False, wait=1) as pf:
     >>>     data = pd.read_parquet(pf)
     >>>     data['x'] += 5
@@ -150,7 +150,7 @@ class ProtectFile:
 
     Reading and updating a json file in EOS with xrdcp:
 
-    >>> from protectfile import ProtectFile
+    >>> from xaux import ProtectFile
     >>> eos_url = 'root://eosuser.cern.ch/'
     >>> fname = '/eos/user/k/kparasch/test.json'
     >>> with ProtectFile(fname, 'r+', eos_url=eos_url) as pf:
@@ -170,7 +170,7 @@ class ProtectFile:
             When a file is locked, the time to wait in seconds before trying to
             access it again.
         use_temporary : bool, default True
-            Whether or not to perform writing operations on a termporary file.
+            Whether or not to perform writing operations on a temporary file.
             Ignored when the file is read-only.
         backup_during_lock : bool, default False
             Whether or not to use a temporary backup file, to restore in case of
@@ -186,7 +186,7 @@ class ProtectFile:
             the original file succeeded.
         max_lock_time : float, default None
             If provided, it will write the maximum runtime in seconds inside the
-            lockfile. This is to avoided crashed accesses locking the file forever.
+            lockfile. This is to avoid crashed accesses locking the file forever.
         eos_url : string, default None
             If provided, it will use xrdcp to copy the temporary file to eos and back.
 
@@ -217,7 +217,7 @@ class ProtectFile:
         self._do_backup = arg.pop('backup_during_lock', False)
         # Keep backup even after unlocking
         self._keep_backup = arg.pop('backup', False)
-        # If backup is to be kept, then it should be activated anyhow
+        # If a backup is to be kept, then it should be activated anyhow
         if self._keep_backup:
             self._do_backup = True
         self._backup_if_readonly = arg.pop('backup_if_readonly', False)
@@ -269,7 +269,7 @@ class ProtectFile:
         if self._readonly:
             self._use_temporary = False
 
-        # Provide an expected running time (to free a file in case of crash)
+        # Provide an expected running time (to free a file in case of a crash)
         max_lock_time = arg.pop('max_lock_time', None)
         if max_lock_time is not None and self._readonly == False \
         and self._nesting_level == 0:
@@ -279,11 +279,13 @@ class ProtectFile:
                 + "still running, file corruption WILL occur. Are you "
                 + "sure this is what you want?")
 
-        # Try to make lockfile, wait if unsuccesful
+        # Try to make lockfile, wait if unsuccessful
+        self._access = False
         while True:
             try:
                 self._flock = io.open(self.lockfile, 'x')
                 self._print_debug("init",f"opened {self.lockfile}")
+                self._access = True
                 break
             except (IOError, OSError, FileExistsError):
                 self._print_debug("init", f"waiting {wait}s to create {self.lockfile}")
@@ -302,7 +304,7 @@ class ProtectFile:
                                 if 'free_after' in info and info['free_after'] < time.time():
                                     # We free the original process by deleting the lockfile
                                     # and then we go to the next step in the while loop.
-                                    # Note that this does not necessary imply this process
+                                    # Note that this does not necessarily imply this process
                                     # gets to use the file; which is the intended behaviour
                                     # (first one wins).
                                     self.lockfile.unlink()
@@ -358,6 +360,8 @@ class ProtectFile:
         return self._fd
 
     def __exit__(self, *args, **kwargs):
+        if not self._access:
+            return
         # Close file pointer
         if not self._fd.closed:
             self._fd.close()
@@ -401,6 +405,8 @@ class ProtectFile:
 
     def mv_temp(self, destination=None):
         """Move temporary file to 'destination' (the original file if destination=None)"""
+        if not self._access:
+            return
         if self._use_temporary:
             if destination is None:
                 # Move temporary file to original file
@@ -429,6 +435,8 @@ class ProtectFile:
 
     def restore(self):
         """Restore the original file from backup and save calculation results"""
+        if not self._access:
+            return
         if self._do_backup:
             self._print_debug("restore", f"rename {self.backupfile} into {self.file}")
             self.backupfile.rename(self.file)
@@ -445,6 +453,8 @@ class ProtectFile:
 
     def release(self, pop=True):
         """Clean up lockfile, tempfile, and backupfile"""
+        if not self._access:
+            return
         # Overly verbose in checking, as to make sure this never fails
         # (to avoid being stuck with remnant lockfiles)
 
