@@ -5,7 +5,10 @@
 # ######################################### #
 
 # Check necessary setup and installs
+poetry --version || exit 1
 gh pr list || exit 1
+
+
 
 if [ $# -eq 0 ]
 then
@@ -82,6 +85,8 @@ case ${answer:0:1} in
         exit 1
     ;;
 esac
+
+
 
 # Kill script on first error
 set -e
