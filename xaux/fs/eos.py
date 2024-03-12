@@ -4,24 +4,35 @@
 # ######################################### #
 
 import os
+import subprocess
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+from .fs import FsPath, _non_strict_resolve
 
-def _non_strict_resolve(path, _as_posix=False):
-    # This function is resolving without strict=True as this 
-    # might lead to infinite loops in case of broken links.
-    if not isinstance(path, Path):
-        path = Path(path)
-    cls = path.__class__
-    path = path.expanduser().as_posix()
-    path = os.path.realpath(path, strict=False)
-    if _as_posix:
-        return path
-    else:
-        return cls(path)
-
+EOS_CELL = 'cern.ch'
 
 _eos_path = Path('/eos')
+try:
+    cmd = subprocess.run(['eos', '--version'], stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, check=True)
+    # Temporary hack as the eos command wrongly returns 255
+    _eos_installed =  cmd.returncode == 0 or cmd.returncode == 255
+except (subprocess.CalledProcessError, FileNotFoundError):
+    _eos_installed = False
+
+try:
+    cmd = subprocess.run(["xrdcp", "--version"], stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, check=True)
+    _xrdcp_installed = cmd.returncode == 0
+except (subprocess.CalledProcessError, FileNotFoundError):
+    _xrdcp_installed = False
+
+eos_accessible = _eos_path.exists() or _eos_installed or _xrdcp_installed
+
+def _assert_eos_accessible(mess=None):
+    if not eos_accessible:
+        mess = f" {mess}" if mess is not None else mess
+        raise EnvironmentError(f"EOS is not installed on your system.{mess}")
 
 def _on_eos(*args):
     if isinstance(args[0], str):
@@ -29,45 +40,44 @@ def _on_eos(*args):
             return True
         elif args[0].startswith('root://eos'):
             return True
+        elif args[0].startswith('root:'):
+            raise ValueError("Unknown path specification {args}.")
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'eos' or args[1] == 'eos/'):
             return True
     parents = _non_strict_resolve(Path(*args)).parents
     return len(parents) > 1 and parents[-2] == _eos_path
 
-
-# Factory
-class FsPath(Path):
-    def __new__(cls, *args):
-        if _on_eos(*args):
-            return EosPath.__new__(EosPath, *args, _eos_checked=True)
-        else:
-            return Path.__new__(Path, *args)
-
-
-class EosPath(Path):
+ 
+class EosPath(FsPath, Path):
     """Path subclass for EOS paths.
 
     Instantiating an FsPath should call this class.
     """
-    __slots__ = ('MGM', 'eos_instance', 'eos_path', 'eos_path_full')
+    __slots__ = ('mgm', 'eos_instance', 'eos_path', 'eos_path_full')
 
     def __new__(cls, *args, _eos_checked=False):
         if cls is EosPath:
             cls = EosWindowsPath if os.name == 'nt' else EosPosixPath
         if isinstance(args[0], str) \
-        and args[0].startswith('root://eos'):
-            if len(args) > 0:
+        and args[0].startswith('root:'):
+            if len(args) > 1:
                 raise ValueError("When specifying the instance `root://eos...` "
                                + "in the path, the latter has to be given as "
                                + "one complete string.")
             parts = args[0].split('/')
-            MGM = '/'.join(parts[:3])
-            eos_instance = self.MGM.split('/')[2].split('.')[0].replace('eos', '')
+            if parts[1] != '' or not parts[2].startswith('eos') or parts[3] != '':
+                raise ValueError(f"Invalid EOS path specification: {args[0]}. "
+                                + "The full path should start with 'root://eos...'"
+                                + " and have a double slash // in between the MGM and "
+                                + "the path itself. \nExample: 'root://eosuser.cern.ch/"
+                                + "/eos/user/s/...'.")
+            mgm = '/'.join(parts[:3])
+            eos_instance = mgm.split('/')[2].split('.')[0].replace('eos', '')
             self = cls._from_parts(['/'.join(parts[3:])])
-            self.MGM = MGM
+            self.mgm = mgm
             self.eos_instance = eos_instance
-            assert self.MGM == f'root://eos{self.eos_instance}.cern.ch' # to verify rest of MGM
+            assert self.mgm == f'root://eos{self.eos_instance}.{EOS_CELL}'
         else:
             self = cls._from_parts(args)
             self.eos_instance = _non_strict_resolve(self, _as_posix=True
@@ -79,7 +89,7 @@ class EosPath(Path):
             raise ValueError("The path is not on EOS.")
         if self.eos_instance == 'home':
             self.eos_instance = 'user'
-        self.MGM = f'root://eos{self.eos_instance}.cern.ch'
+        self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL}'
         parts = _non_strict_resolve(self, _as_posix=True).split('/')
         instance_parts = parts[2].split('-')
         if len(instance_parts) > 1:
@@ -90,11 +100,23 @@ class EosPath(Path):
         else:
             parts = ['', 'eos', self.eos_instance, *parts[3:]]
         self.eos_path = '/'.join(parts)
-        self.eos_path_full = f'{self.MGM}/{self.eos_path}'
+        self.eos_path_full = f'{self.mgm}/{self.eos_path}'
         return self
 
-    def resolve(self):
-        return EosPath(self.eos_path)
+    def resolve(self, *args, **kwargs):
+        return EosPath(Path(self.eos_path).resolve(), *args, **kwargs)
+
+    def exists(self, *args, **kwargs):
+        _assert_eos_accessible("Cannot check for existence of EOS paths.")
+        return Path(self.eos_path).exists(*args, **kwargs)
+
+    def touch(self, *args, **kwargs):
+        _assert_eos_accessible("Cannot touch EOS paths.")
+        return Path.touch(self, *args, **kwargs)
+
+    def symlink_to(self, *args, **kwargs):
+        _assert_eos_accessible("Cannot create symlinks on EOS paths.")
+        return Path.symlink_to(self, *args, **kwargs)
 
 
 class EosPosixPath(EosPath, PurePosixPath):
@@ -108,7 +130,7 @@ class EosPosixPath(EosPath, PurePosixPath):
     if os.name == 'nt':
         def __new__(cls, *args, **kwargs):
             raise RuntimeError(
-                f"cannot instantiate {cls.__name__!r} on your system")
+                f"Cannot instantiate {cls.__name__!r} on your system")
 
 
 class EosWindowsPath(EosPath, PureWindowsPath):
@@ -125,5 +147,5 @@ class EosWindowsPath(EosPath, PureWindowsPath):
     if os.name != 'nt':
         def __new__(cls, *args, **kwargs):
             raise RuntimeError(
-                f"cannot instantiate {cls.__name__!r} on your system")
+                f"Cannot instantiate {cls.__name__!r} on your system")
 
