@@ -1,3 +1,8 @@
+# copyright ############################### #
+# This file is part of the Xaux Package.    #
+# Copyright (c) CERN, 2024.                 #
+# ######################################### #
+
 from multiprocessing import Pool
 import pytest
 import json

@@ -1,4 +1,8 @@
-import json
+# copyright ############################### #
+# This file is part of the Xaux Package.    #
+# Copyright (c) CERN, 2024.                 #
+# ######################################### #import json
+
 from pathlib import Path
 from multiprocessing import Process, Queue
 import time
