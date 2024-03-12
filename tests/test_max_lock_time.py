@@ -7,6 +7,7 @@ from pathlib import Path
 from multiprocessing import Process, Queue
 import time
 import pytest
+import json
 
 from xaux import ProtectFile
 from _test_helpers import init_file, change_file_protected, propagate_child_errors, kill_process

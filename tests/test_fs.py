@@ -279,7 +279,7 @@ def test_instantiation_eos():
     fs_link = "eos_test"
     file_fs = (Path(fs_link) / _file_rel).as_posix()
     for f in [file_abs, rel_link, abs_link, fs_link]:
-        if eos_accessible and FsPath(f).exists(follow_symlinks=False):
+        if eos_accessible and FsPath(f).lexists():
             FsPath(f).unlink()
     this_path = EosSystemPath(file_abs).resolve()
     # Test invalid paths
