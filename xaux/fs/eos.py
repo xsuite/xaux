@@ -4,30 +4,46 @@
 # ######################################### #
 
 import os
-import subprocess
+from subprocess import run, PIPE, CalledProcessError
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from .fs import FsPath, _non_strict_resolve
+from .fs import FsPath, _non_strict_resolve, tempdir
 
 EOS_CELL = 'cern.ch'
 
 _eos_path = Path('/eos')
-try:
-    cmd = subprocess.run(['eos', '--version'], stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, check=True)
-    # Temporary hack as the eos command wrongly returns 255
-    _eos_installed =  cmd.returncode == 0 or cmd.returncode == 255
-except (subprocess.CalledProcessError, FileNotFoundError):
-    _eos_installed = False
 
-try:
-    cmd = subprocess.run(["xrdcp", "--version"], stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, check=True)
-    _xrdcp_installed = cmd.returncode == 0
-except (subprocess.CalledProcessError, FileNotFoundError):
-    _xrdcp_installed = False
+_eos_arg_for_find = 'find'
+_eos_installed = False
+_xrdcp_installed = False
+if os.name != 'nt':
+    try:
+        cmd = run(['eos', '--version'], stdout=PIPE,
+                            stderr=PIPE, check=True)
+        # Temporary hack as the eos command wrongly returns 255
+        _eos_installed =  cmd.returncode == 0 or cmd.returncode == 255
 
-eos_accessible = _eos_path.exists() or _eos_installed or _xrdcp_installed
+        if _eos_installed:
+            # The command `eos find` has the wrong behaviour on new machines (running eos 5.2).
+            # For this reason, the command `eos oldfind` has been introduced.
+            # However, this command does not exist on the old machines, so in that case we
+            # default back to `eos find`. This function gives the correct argument for eos find.
+            cmd = run(['eos', 'oldfind'], stdout=PIPE,
+                                stderr=PIPE)
+            if cmd.returncode != 255:
+                # Command found; we are running on a machine running new eos >= 5.2
+                _eos_arg_for_find = 'oldfind'
+    except (CalledProcessError, FileNotFoundError):
+        _eos_installed = False
+
+    try:
+        cmd = run(["xrdcp", "--version"], stdout=PIPE,
+                            stderr=PIPE, check=True)
+        _xrdcp_installed = cmd.returncode == 0
+    except (CalledProcessError, FileNotFoundError):
+        _xrdcp_installed = False
+
+eos_accessible = _eos_path.exists() or _eos_installed
 
 def _assert_eos_accessible(mess=None):
     if not eos_accessible:
@@ -48,7 +64,7 @@ def _on_eos(*args):
     parents = _non_strict_resolve(Path(*args)).parents
     return len(parents) > 1 and parents[-2] == _eos_path
 
- 
+
 class EosPath(FsPath, Path):
     """Path subclass for EOS paths.
 
@@ -103,20 +119,80 @@ class EosPath(FsPath, Path):
         self.eos_path_full = f'{self.mgm}/{self.eos_path}'
         return self
 
+    # Resolving EOS paths can be tricky due to different mount points.
+    # Luckily, the path is already resolved at instantiation.
     def resolve(self, *args, **kwargs):
-        return EosPath(Path(self.eos_path).resolve(), *args, **kwargs)
+        return EosPath(self.eos_path, *args, **kwargs)
 
+    # TODO
+    def stat(self, *args, **kwargs):
+        print("stat in EosPath")
+        _assert_eos_accessible("Cannot stat EOS paths.")
+        if _eos_installed:
+            cmd = run(['eos', self.mgm, 'stat', self.eos_path],
+                        stdout=PIPE, stderr=PIPE, check=True)
+            if cmd.returncode != 0:
+                stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
+                raise RuntimeError(f"Failed to stat {self}.\n{stderr}")
+        else:
+            return Path.touch(self, *args, **kwargs)
+
+    # TODO
     def exists(self, *args, **kwargs):
         _assert_eos_accessible("Cannot check for existence of EOS paths.")
         return Path(self.eos_path).exists(*args, **kwargs)
 
     def touch(self, *args, **kwargs):
         _assert_eos_accessible("Cannot touch EOS paths.")
-        return Path.touch(self, *args, **kwargs)
+        if _eos_installed:
+            cmd = run(['eos', self.mgm, 'touch', self.eos_path],
+                        stdout=PIPE, stderr=PIPE, check=True)
+            if cmd.returncode != 0:
+                stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
+                raise RuntimeError(f"Failed to touch {self}.\n{stderr}")
+        else:
+            return Path.touch(self, *args, **kwargs)
 
     def symlink_to(self, *args, **kwargs):
         _assert_eos_accessible("Cannot create symlinks on EOS paths.")
         return Path.symlink_to(self, *args, **kwargs)
+
+    def unlink(self, *args, **kwargs):
+        _assert_eos_accessible("Cannot unlink EOS paths.")
+        if _eos_installed:
+            cmd = run(['eos', self.mgm, 'rm', self.eos_path],
+                        stdout=PIPE, stderr=PIPE, check=True)
+            if cmd.returncode != 0:
+                stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
+                raise RuntimeError(f"Failed to unlink {self}.\n{stderr}")
+        else:
+            return Path.unlink(self, *args, **kwargs)
+
+    def rmdir(self, *args, **kwargs):
+        _assert_eos_accessible("Cannot rmdir EOS paths.")
+        if not self.is_dir():
+            raise NotADirectoryError(f"{self} is not a directory.")
+        if _eos_installed:
+            cmd = run(['eos', self.mgm, 'rmdir', self.eos_path],
+                        stdout=PIPE, stderr=PIPE, check=True)
+            if cmd.returncode != 0:
+                stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
+                raise RuntimeError(f"Failed to rmdir {self}.\n{stderr}")
+        else:
+            return Path.rmdir(self, *args, **kwargs)
+
+    def rmtree(self, *args, **kwargs):
+        _assert_eos_accessible("Cannot rmtree EOS paths.")
+        if not self.is_dir():
+            raise NotADirectoryError(f"{self} is not a directory.")
+        if _eos_installed:
+            cmd = run(['eos', self.mgm, 'rm', '-r', self.eos_path],
+                        stdout=PIPE, stderr=PIPE, check=True)
+            if cmd.returncode != 0:
+                stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
+                raise RuntimeError(f"Failed to rmtree {self}.\n{stderr}")
+        else:
+            return FsPath.rmtree(self, *args, **kwargs)
 
 
 class EosPosixPath(EosPath, PurePosixPath):

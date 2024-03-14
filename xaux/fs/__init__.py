@@ -6,3 +6,4 @@
 from .fs import FsPath, LocalPath, LocalPosixPath, LocalWindowsPath
 from .eos import EosPath, EosPosixPath, EosWindowsPath, eos_accessible
 from .afs import AfsPath, AfsPosixPath, AfsWindowsPath, afs_accessible
+from .io import cp, mv

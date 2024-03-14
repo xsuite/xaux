@@ -4,6 +4,7 @@
 # ######################################### #
 
 import os
+from shutil import rmtree
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
@@ -55,6 +56,19 @@ class FsPath:
 
     def is_broken_symlink(self):
         return self.is_symlink() and not self.exists()
+
+    def rmtree(self, *args, **kwargs):
+        if not self.is_dir():
+            raise NotADirectoryError(f"{self} is not a directory.")
+        rmtree(self.resolve().as_posix(), *args, **kwargs)
+
+    def copy_to(self, dst, *args, **kwargs):
+        from .io import cp
+        cp(self, dst, *args, **kwargs)
+
+    def move_to(self, dst, *args, **kwargs):
+        from .io import mv
+        mv(self, dst, *args, **kwargs)
 
 
 # To give regular Path objects the same functionality as FsPath objects

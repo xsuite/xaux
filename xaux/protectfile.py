@@ -11,10 +11,11 @@ import io
 from pathlib import Path
 import random
 import shutil
-import tempfile
 import time
 import json
 import subprocess
+
+from .fs.temp import _tempdir
 
 
 LOCKFILE_NESTING_MAX_LEVEL = 5   # Max number of lockfiles to exist simultaneously
@@ -22,15 +23,13 @@ LOCKFILE_NESTING_MAX_LOCK_TIME = 10
 LOCKFILE_NESTING_WAIT = 0.1
 
 
-tempdir = tempfile.TemporaryDirectory()
 protected_open = {}
-
 
 def exit_handler():
     """This handles cleaning of potential leftover lockfiles and backups."""
     for file in protected_open.values():
         file.release(pop=False)
-    tempdir.cleanup()
+    _tempdir.cleanup()
 atexit.register(exit_handler)
 
 
