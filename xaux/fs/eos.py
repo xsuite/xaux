@@ -7,7 +7,7 @@ import os
 from subprocess import run, PIPE, CalledProcessError
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from .fs import FsPath, _non_strict_resolve, tempdir
+from .fs import FsPath, _non_strict_resolve
 
 EOS_CELL = 'cern.ch'
 

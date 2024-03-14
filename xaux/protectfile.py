@@ -247,7 +247,7 @@ class ProtectFile:
         file = arg['file']
         self._file = file
         self._lock = Path(file.parent, file.name + '.lock').resolve()
-        self._temp = Path(tempdir.name, file.name).resolve()
+        self._temp = Path(_tempdir.name, file.name).resolve()
 
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the backup and temporary files
