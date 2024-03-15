@@ -8,13 +8,13 @@ import atexit
 import datetime
 import hashlib
 import io
-from pathlib import Path
 import random
 import shutil
 import time
 import json
 import subprocess
 
+from .fs import FsPath
 from .fs.temp import _tempdir
 
 
@@ -60,15 +60,6 @@ def get_fstat(filename):
                 'st_mtime_ns':       int(stats.st_mtime_ns),
                 'st_ctime_ns':       int(stats.st_ctime_ns),
             }
-
-
-def xrdcp_installed():
-    try:
-        cmd = subprocess.run(["xrdcp", "--version"], stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, check=True)
-        return cmd.returncode == 0
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
 
 
 class ProtectFile:
@@ -152,14 +143,6 @@ class ProtectFile:
     >>>     pf.truncate(0)          # Delete file contents (to avoid appending)
     >>>     pf.seek(0)              # Move file pointer to start of file
     >>>     data.to_parquet(pf, index=True)
-
-    Reading and updating a json file in EOS with xrdcp:
-
-    >>> from xaux import ProtectFile
-    >>> eos_url = 'root://eosuser.cern.ch/'
-    >>> fname = '/eos/user/k/kparasch/test.json'
-    >>> with ProtectFile(fname, 'r+', eos_url=eos_url) as pf:
-    >>>     pass
     """
 
     # Use debug flag below to inspect steps in file IO
@@ -193,8 +176,6 @@ class ProtectFile:
         max_lock_time : float, default None
             If provided, it will write the maximum runtime in seconds inside the
             lockfile. This is to avoid crashed accesses locking the file forever.
-        eos_url : string, default None
-            If provided, it will use xrdcp to copy the temporary file to eos and back.
 
         Additionally, the following parameters are inherited from open():
             'file', 'mode', 'buffering', 'encoding', 'errors', 'newline', 'closefd', 'opener'
@@ -226,28 +207,14 @@ class ProtectFile:
 
         # Using a temporary file to write to
         self._use_temporary = arg.pop('use_temporary', True)
-        self._check_hash = arg.pop('check_hash', True)
-
-        # Make sure conditions are satisfied when using EOS-XRDCP
-        self._eos_url = arg.pop('eos_url', None)
-        if self._eos_url is not None:
-            self.original_eos_path = arg['file']
-            if self._do_backup or self._backup_if_readonly:
-                raise NotImplementedError("Backup not supported with eos_url.")
-            if not self._eos_url.startswith("root://eos") or not self._eos_url.endswith('.cern.ch/'):
-                raise NotImplementedError(f'Invalid EOS url provided: {self._eos_url=}')
-            if not str(self.original_eos_path).startswith("/eos"):
-                raise NotImplementedError(f'Only /eos paths are supported with eos_url.')
-            if not xrdcp_installed():
-                raise RuntimeError("xrdcp is not installed.")
-            self.original_eos_path = self._eos_url + self.original_eos_path
+        self._check_hash = arg.pop('check_hash', False)
 
         # Initialise paths
-        arg['file'] = Path(arg['file']).resolve()
+        arg['file'] = FsPath(arg['file']).resolve()
         file = arg['file']
         self._file = file
-        self._lock = Path(file.parent, file.name + '.lock').resolve()
-        self._temp = Path(_tempdir.name, file.name).resolve()
+        self._lock = FsPath(file.parent, file.name + '.lock').resolve()
+        self._temp = FsPath(_tempdir.name, file.name).resolve()
 
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the backup and temporary files
@@ -302,6 +269,8 @@ class ProtectFile:
                 self._print_debug("init",f"created {self.lockfile}")
                 self._access = True
                 break
+            except PermissionError:
+                raise PermissionError(f"Cannot access {self.lockfile}; permission denied.")
             except (IOError, OSError, FileExistsError):
                 self._print_debug("init", f"waiting {wait}s to create {self.lockfile}")
                 time.sleep(wait)
@@ -345,26 +314,23 @@ class ProtectFile:
         if self._readonly and not self._backup_if_readonly:
             self._do_backup = False
         if self._do_backup and self._exists:
-            self._backup = Path(file.parent, file.name + '.backup').resolve()
+            self._backup = FsPath(file.parent, file.name + '.backup').resolve()
             self._print_debug("init", f"cp {self.file=} to {self.backupfile=}")
-            shutil.copy2(self.file, self.backupfile)
+            self.file.copy_to(self.backupfile)
         else:
             self._backup = None
 
         # Store stats (to check if file got corrupted later)
         if self._nesting_level == 0 and self._exists:
-            self._fstat = get_fstat(self.file)
+            # self._fstat = get_fstat(self.file)
+            self._hash = get_hash(self.file)
 
         # Choose file pointer:
         # To the temporary file if writing, or existing file if read-only
         if self._use_temporary:
             if self._exists:
-                if self._eos_url is not None:
-                    self._print_debug("init", f"xrdcp {self.original_eos_path=} to {self.tempfile=}")
-                    self.xrdcp(self.original_eos_path, self.tempfile)
-                else:
-                    self._print_debug("init", f"cp {self.file=} to {self.tempfile=}")
-                    shutil.copy2(self.file, self.tempfile)
+                self._print_debug("init", f"cp {self.file=} to {self.tempfile=}")
+                self.file.copy_to(self.tempfile)
             arg['file'] = self.tempfile
         self._fd = io.open(**arg)
 
@@ -386,19 +352,18 @@ class ProtectFile:
             self._fd.close()
         # Check that original file was not modified in between (i.e. corrupted)
         file_changed = False
-        if self._nesting_level == 0 and self._exists:
-            new_stats = get_fstat(self.file)
-            for key, val in self._fstat.items():
-                if key not in new_stats or val != new_stats[key]:
-                    file_changed = True
+        if self._nesting_level == 0 and self._check_hash and self._exists:
+            # new_stats = get_fstat(self.file)
+            new_hash = get_hash(self.file)
+            if self._hash != new_hash:
+                file_changed = True
+            # for key, val in self._fstat.items():
+            #     if key not in new_stats or val != new_stats[key]:
+            #         file_changed = True
         if file_changed:
             print(f"Error: File {self.file} changed during lock!")
             # If corrupted, restore from backup
             # and move result of calculation (i.e. tempfile) to the parent folder
-            print("Old stats:")
-            print(self._fstat)
-            print("New stats:")
-            print(new_stats)
             self.restore()
         else:
             # All is fine: move result from temporary file to original
@@ -429,25 +394,16 @@ class ProtectFile:
         if self._use_temporary:
             if destination is None:
                 # Move temporary file to original file
-                if self._eos_url is not None:
-                    self._print_debug("mv_temp", f"xrdcp {self.tempfile=} "
-                                 + f"to {self.original_eos_path=}")
-                    self.xrdcp(self.tempfile, self.original_eos_path)
-                else:
-                    self._print_debug("mv_temp", f"cp {self.tempfile=} to {self.file=}")
-                    shutil.copy2(self.tempfile, self.file)
-                # Check if copy succeeded
-                if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
-                    print(f"Warning: tried to copy temporary file {self.tempfile} into {self.file}, "
-                          + "but hashes do not match!")
-                    self.restore()
+                self._print_debug("mv_temp", f"cp {self.tempfile=} to {self.file=}")
+                self.tempfile.copy_to(self.file)
+                # # Check if copy succeeded
+                # if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
+                #     print(f"Warning: tried to copy temporary file {self.tempfile} into {self.file}, "
+                #           + "but hashes do not match!")
+                #     self.restore()
             else:
-                if self._eos_url is not None:
-                    self._print_debug("mv_temp", f"xrdcp {self.tempfile=} to {destination=}")
-                    self.xrdcp(self.tempfile, destination)
-                else:
-                    self._print_debug("mv_temp", f"cp {self.tempfile=} to {destination=}")
-                    shutil.copy2(self.tempfile, destination)
+                self._print_debug("mv_temp", f"cp {self.tempfile=} to {destination=}")
+                self.tempfile.copy_to(destination)
             self._print_debug("mv_temp", f"unlink {self.tempfile=}")
             self.tempfile.unlink()
 
@@ -462,10 +418,7 @@ class ProtectFile:
             print('Restored file to previous state.')
         if self._use_temporary:
             extension = f"__{datetime.datetime.now().isoformat()}.result"
-            if self._eos_url is not None:
-                alt_file = self.original_eos_path + extension
-            else:
-                alt_file = Path(self.file.parent, self.file.name + extension).resolve()
+            alt_file = FsPath(self.file.parent, self.file.name + extension).resolve()
             self.mv_temp(alt_file)
             print(f"Saved calculation results in {alt_file.name}.")
 
@@ -499,16 +452,6 @@ class ProtectFile:
         # Remove file from the protected register
         if pop:
             protected_open.pop(self._file, 0)
-
-
-    def xrdcp(self, source=None, destination=None):
-        if source is None or destination is None:
-            raise RuntimeError("Source or destination not specified in xrdcp command.")
-        if self._eos_url is None:
-            raise RuntimeError("self._eos_url is None, while it shouldn't have been.")
-
-        subprocess.run(["xrdcp", "-f", f"{str(source)}", f"{str(destination)}"],
-                       check=True)
 
     def _print_debug(self, prc, msg):
         if self._debug:

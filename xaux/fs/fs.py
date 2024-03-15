@@ -49,6 +49,16 @@ class FsPath:
     def home(cls):
         return cls(Path.home())
 
+    def resolve(self, *args, follow_symlink=True, **kwargs):
+        return FsPath(Path.resolve(self))
+        # if self.is_symlink() and follow_symlink:
+        #     print(f"Resolving symlink:  {self=}  {os.readlink(self)}   {Path.resolve(self)}")
+        #     return FsPath(os.readlink(self)).resolve()
+        # else:
+        #     print(f"Resolving path:  {self=}   ns={_non_strict_resolve(Path(self).absolute().parent, _as_posix=True)}")
+        #     return FsPath(_non_strict_resolve(
+        #         Path(self).absolute().parent, _as_posix=True), self.name)
+
     # New methods
 
     def lexists(self):
@@ -72,7 +82,7 @@ class FsPath:
 
 
 # To give regular Path objects the same functionality as FsPath objects
-class LocalPath(Path, FsPath):
+class LocalPath(FsPath, Path):
     """Path subclass for local paths.
 
     Instantiating an FsPath should call this class.

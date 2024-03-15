@@ -31,8 +31,8 @@ def cp(*args, recursive=False, follow_symlinks=True, force_xrdcp=False, force_eo
                 path_args[-1] = path_args[-1] + '/'
             r = ['-r'] if recursive else []
         if _xrdcp_installed and not force_eos:
-            opts = ['--cksum', 'adler32', '--xattr', '--rm-bad-cksum', \
-                    '--parallel', '8', '--silent']
+            p = ['--parallel', f"{min(len(args) - 1, 8)}"] if len(args) > 2 or recursive else []
+            opts = ['--cksum', 'adler32', '--xattr', '--rm-bad-cksum', *p, '--silent']
             if len(args) == 2:
                 cmds = ['xrdcp', *r, *opts, *path_args]
             else:
@@ -49,7 +49,8 @@ def cp(*args, recursive=False, follow_symlinks=True, force_xrdcp=False, force_eo
                 stderr  += f"Failed {cmd_mess}.\n"
                 stderr  += cmd.stderr.decode('UTF-8').strip().split('\n')
         if _eos_installed and not force_xrdcp:
-            opts = ['--streams', '8', '--silent']
+            p = ['--streams', f"{min(len(args) - 1, 8)}"] if len(args) > 2 or recursive  else []
+            opts = [*p, '--silent']
             cmds = ['eos', 'cp', *r, *opts, *path_args]
             cmd = run(cmds, stdout=PIPE, stderr=PIPE, check=True)
             if cmd.returncode == 0:
@@ -77,6 +78,7 @@ def cp(*args, recursive=False, follow_symlinks=True, force_xrdcp=False, force_eo
                     stderr += f"Failed {cmd_mess}.\n"
                     stderr += str(e)
                     break
+        return
     raise RuntimeError(stderr)
 
 

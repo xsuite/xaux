@@ -38,7 +38,7 @@ def _on_afs(*args):
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'afs' or args[1] == 'afs/'):
             return True
-    parents = _non_strict_resolve(Path(*args)).parents
+    parents = [_non_strict_resolve(p) for p in Path(*args).absolute().parents]
     return len(parents) > 1 and parents[-2] == _afs_path
 
 

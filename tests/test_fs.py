@@ -180,6 +180,7 @@ def _test_instantiation(file, PathClass, SystemPathClass, NonSystemPathClass, th
         for cls in [FsPath, PathClass, SystemPathClass]:
             # Testing all initialisations
             new_path = cls(path)
+            # print(f"{path=}  {cls=}  {new_path=}")
             assert new_path.resolve() == this_path
             # Testing all mixed initialisations
             for cls2 in [FsPath, PathClass, SystemPathClass]:
@@ -201,7 +202,7 @@ def test_instantiation_local():
     rel_link = "example_local_relative_link.txt"
     abs_link = "example_local_absolute_link.txt"
     for f in [file, rel_link, abs_link]:
-        if FsPath(f).exists():
+        if FsPath(f).lexists():
             FsPath(f).unlink()
     this_path = LocalSystemPath(file).resolve()
     # Test with non-existing file
@@ -225,6 +226,10 @@ def test_instantiation_local():
 
 
 def test_instantiation_afs():
+    if not isinstance(FsPath.cwd(), LocalPath):
+        raise RuntimeError("This test should be ran on a local path.")
+    LocalSystemPath    = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
+    LocalNonSystemPath = LocalPosixPath   if os.name == 'nt' else LocalWindowsPath
     AfsSystemPath    = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
     AfsNonSystemPath = AfsPosixPath   if os.name == 'nt' else AfsWindowsPath
     _file_rel = "example_afs_file.txt"
@@ -233,15 +238,16 @@ def test_instantiation_afs():
     abs_link = "example_afs_absolute_link.txt"
     fs_link = "afs_test"
     file_fs = (Path(fs_link) / _file_rel).as_posix()
-    for f in [file_abs, rel_link, abs_link, fs_link]:
+    link_fs = (Path(fs_link) / "example_afs_link_to_fs.txt").as_posix()
+    for f in [file_abs, rel_link, abs_link, fs_link, link_fs]:
         if afs_accessible and FsPath(f).lexists():
             FsPath(f).unlink()
-    this_path = AfsSystemPath(file_abs).resolve()
+    this_path = AfsSystemPath(file_abs)
     # Test invalid paths
     with pytest.raises(ValueError, match="The path is not on AFS."):
-        AfsPath("example_local_file.txt").resolve()
+        AfsPath("example_local_file.txt")
     with pytest.raises(ValueError, match="The path is not on AFS."):
-        AfsPath(_eos_test_path).resolve()
+        AfsPath(_eos_test_path)
     # Test with non-existing file
     print(f"Testing AfsPath with {file_abs} (non-existent)...")
     _test_instantiation(file_abs, AfsPath, AfsSystemPath, AfsNonSystemPath, this_path)
@@ -254,22 +260,37 @@ def test_instantiation_afs():
         _test_instantiation(file_abs, AfsPath, AfsSystemPath, AfsNonSystemPath, this_path)
         # Test with relative link
         FsPath(rel_link).symlink_to(Path(_file_rel))
-        print(f"Testing AfsPath with {rel_link} (relative link)...")
+        print(f"Testing AfsPath with {rel_link} (relative link on AFS pointing to AFS file)...")
         _test_instantiation(rel_link, AfsPath, AfsSystemPath, AfsNonSystemPath, this_path)
+        assert FsPath(rel_link).is_symlink()
+        assert isinstance(FsPath(rel_link).resolve(), AfsPath)
         # Test with absolute link
         FsPath(abs_link).symlink_to(Path(file_abs).resolve())
-        print(f"Testing AfsPath with {abs_link} (absolute link)...")
-        _test_instantiation(abs_link, AfsPath, AfsSystemPath, AfsNonSystemPath, this_path)
+        print(f"Testing AfsPath with {abs_link} (absolute link on local fs pointing to AFS file)...")
+        _test_instantiation(abs_link, LocalPath, LocalSystemPath, LocalNonSystemPath, this_path)
+        assert FsPath(abs_link).is_symlink()
+        assert isinstance(FsPath(abs_link).resolve(), AfsPath)
         # Test with local link to AFS folder
         FsPath(fs_link).symlink_to(Path(_afs_test_path).resolve())
         print(f"Testing AfsPath with {file_fs} (using local link to AFS folder)...")
         _test_instantiation(file_fs, AfsPath, AfsSystemPath, AfsNonSystemPath, this_path)
+        assert not FsPath(fs_link).is_symlink()
+        # Test with absolute link on AFS to local
+        FsPath(link_fs).symlink_to(Path(abs_link).resolve())
+        print(f"Testing AfsPath with {link_fs} (absolute link on AFS pointing to local file)...")
+        _test_instantiation(link_fs, AfsPath, AfsSystemPath, AfsNonSystemPath, this_path)
+        assert FsPath(link_fs).is_symlink()
+        assert isinstance(FsPath(link_fs).resolve(), LocalPath)
         # Clean-up
-        for f in [file_abs, rel_link, abs_link, fs_link]:
+        for f in [file_abs, rel_link, abs_link, fs_link, link_fs]:
             FsPath(f).unlink()
 
 
 def test_instantiation_eos():
+    if not isinstance(FsPath.cwd(), LocalPath):
+        raise RuntimeError("This test should be ran on a local path.")
+    LocalSystemPath    = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
+    LocalNonSystemPath = LocalPosixPath   if os.name == 'nt' else LocalWindowsPath
     EosSystemPath    = EosWindowsPath if os.name == 'nt' else EosPosixPath
     EosNonSystemPath = EosPosixPath   if os.name == 'nt' else EosWindowsPath
     _file_rel = "example_eos_file.txt"
@@ -278,20 +299,21 @@ def test_instantiation_eos():
     abs_link = "example_eos_absolute_link.txt"
     fs_link = "eos_test"
     file_fs = (Path(fs_link) / _file_rel).as_posix()
-    for f in [file_abs, rel_link, abs_link, fs_link]:
+    link_fs = (Path(fs_link) / "example_eos_link_to_fs.txt").as_posix()
+    for f in [file_abs, rel_link, abs_link, fs_link, link_fs]:
         if eos_accessible and FsPath(f).lexists():
             FsPath(f).unlink()
-    this_path = EosSystemPath(file_abs).resolve()
+    this_path = EosSystemPath(file_abs)
     # Test invalid paths
     with pytest.raises(ValueError, match="The path is not on EOS."):
-        EosPath("example_local_file.txt").resolve()
+        EosPath("example_local_file.txt")
     with pytest.raises(ValueError, match="The path is not on EOS."):
-        EosPath(_afs_test_path).resolve()
+        EosPath(_afs_test_path)
     # Test with non-existing file
     print(f"Testing EosPath with {file_abs} (non-existent)...")
     _test_instantiation(file_abs, EosPath, EosSystemPath, EosNonSystemPath, this_path)
     if not eos_accessible:
-            warnings.warn("EOS is not accessible. Skipping the remainder of test_instantiation_eos.")
+            warnings.warn("EOS is not accessible. Skipping the rest of the test.")
     else:
         # Test with existing file
         FsPath(file_abs).touch()
@@ -299,18 +321,29 @@ def test_instantiation_eos():
         _test_instantiation(file_abs, EosPath, EosSystemPath, EosNonSystemPath, this_path)
         # Test with relative link
         FsPath(rel_link).symlink_to(Path(_file_rel))
-        print(f"Testing EosPath with {rel_link} (relative link)...")
+        print(f"Testing EosPath with {rel_link} (relative link on EOS pointing to EOS file)...")
         _test_instantiation(rel_link, EosPath, EosSystemPath, EosNonSystemPath, this_path)
+        assert rel_link.is_symlink()
+        assert isinstance(rel_link.resolve(), EosPath)
         # Test with absolute link
         FsPath(abs_link).symlink_to(Path(file_abs).resolve())
-        print(f"Testing EosPath with {abs_link} (absolute link)...")
-        _test_instantiation(abs_link, EosPath, EosSystemPath, EosNonSystemPath, this_path)
+        print(f"Testing EosPath with {abs_link} (absolute link on local fs pointing to EOS file)...")
+        _test_instantiation(abs_link, LocalPath, LocalSystemPath, LocalNonSystemPath, this_path)
+        assert abs_link.is_symlink()
+        assert isinstance(abs_link.resolve(), EosPath)
         # Test with local link to EOS folder
         FsPath(fs_link).symlink_to(Path(_eos_test_path).resolve())
         print(f"Testing EosPath with {file_fs} (using local link to EOS folder)...")
         _test_instantiation(file_fs, EosPath, EosSystemPath, EosNonSystemPath, this_path)
+        assert not file_fs.is_symlink()
+        # Test with absolute link on EOS to local
+        FsPath(link_fs).symlink_to(Path(abs_link).resolve())
+        print(f"Testing EosPath with {link_fs} (absolute link on EOS pointing to local file)...")
+        _test_instantiation(link_fs, EosPath, EosSystemPath, EosNonSystemPath, this_path)
+        assert link_fs.is_symlink()
+        assert isinstance(link_fs.resolve(), LocalPath)
         # Clean-up
-        for f in [file_abs, rel_link, abs_link, fs_link]:
+        for f in [file_abs, rel_link, abs_link, fs_link, link_fs]:
             FsPath(f).unlink()
 
 
@@ -320,7 +353,7 @@ def test_eos_components():
     else:
         _file_rel = "example_eos_file.txt"
         file_ref = (Path(_eos_test_path) / _file_rel).as_posix()
-        this_path = EosPath(file_ref).resolve()
+        this_path = EosPath(file_ref)
         assert isinstance(this_path, EosPath)
         files = [file_ref]
         files.append(file_ref.replace("/user/", "/home/"))
@@ -332,7 +365,8 @@ def test_eos_components():
         for file in files:
             print(f"Testing EosPath components with {file}...")
             path = FsPath(file)
-            assert path.resolve() == this_path
+            if eos_accessible:
+                assert path.resolve() == this_path
             assert isinstance(path, EosPath)
             assert path.eos_instance == "user"
             assert path.mgm == f"root://eosuser.cern.ch"

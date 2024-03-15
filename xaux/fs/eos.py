@@ -18,8 +18,7 @@ _eos_installed = False
 _xrdcp_installed = False
 if os.name != 'nt':
     try:
-        cmd = run(['eos', '--version'], stdout=PIPE,
-                            stderr=PIPE, check=True)
+        cmd = run(['eos', '--version'], stdout=PIPE, stderr=PIPE)
         # Temporary hack as the eos command wrongly returns 255
         _eos_installed =  cmd.returncode == 0 or cmd.returncode == 255
 
@@ -61,7 +60,7 @@ def _on_eos(*args):
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'eos' or args[1] == 'eos/'):
             return True
-    parents = _non_strict_resolve(Path(*args)).parents
+    parents = [_non_strict_resolve(p) for p in Path(*args).absolute().parents]
     return len(parents) > 1 and parents[-2] == _eos_path
 
 
@@ -121,23 +120,25 @@ class EosPath(FsPath, Path):
 
     # Resolving EOS paths can be tricky due to different mount points.
     # Luckily, the path is already resolved at instantiation.
-    def resolve(self, *args, **kwargs):
+    # TODO: should be with eos
+    def resolve(self, *args, follow_symlink=True, **kwargs):
+        # TODO: this does not resolve internal links; what if the file itself is a link...
         return EosPath(self.eos_path, *args, **kwargs)
 
-    # TODO
+    # TODO: should be with eos
     def stat(self, *args, **kwargs):
-        print("stat in EosPath")
-        _assert_eos_accessible("Cannot stat EOS paths.")
-        if _eos_installed:
-            cmd = run(['eos', self.mgm, 'stat', self.eos_path],
-                        stdout=PIPE, stderr=PIPE, check=True)
-            if cmd.returncode != 0:
-                stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
-                raise RuntimeError(f"Failed to stat {self}.\n{stderr}")
-        else:
-            return Path.touch(self, *args, **kwargs)
+        # print("stat in EosPath")
+        # _assert_eos_accessible("Cannot stat EOS paths.")
+        # if _eos_installed:
+        #     cmd = run(['eos', self.mgm, 'stat', self.eos_path],
+        #                 stdout=PIPE, stderr=PIPE, check=True)
+        #     if cmd.returncode != 0:
+        #         stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
+        #         raise RuntimeError(f"Failed to stat {self}.\n{stderr}")
+        # else:
+        return Path.stat(self, *args, **kwargs)
 
-    # TODO
+    # TODO: should be with eos
     def exists(self, *args, **kwargs):
         _assert_eos_accessible("Cannot check for existence of EOS paths.")
         return Path(self.eos_path).exists(*args, **kwargs)
@@ -153,6 +154,7 @@ class EosPath(FsPath, Path):
         else:
             return Path.touch(self, *args, **kwargs)
 
+    # TODO: should be with eos
     def symlink_to(self, *args, **kwargs):
         _assert_eos_accessible("Cannot create symlinks on EOS paths.")
         return Path.symlink_to(self, *args, **kwargs)
