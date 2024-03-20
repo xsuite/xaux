@@ -133,7 +133,7 @@ class EosPath(FsPath, Path):
         if self.eos_instance == 'home':
             self.eos_instance = 'user'
         self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL}'
-        parts = _non_strict_resolve(self, _as_posix=True).split('/')
+        parts = _non_strict_resolve(self.parent, _as_posix=True).split('/')
         instance_parts = parts[2].split('-')
         if len(instance_parts) > 1:
             if len(instance_parts) > 2:
@@ -142,7 +142,7 @@ class EosPath(FsPath, Path):
                 parts = ['', 'eos', self.eos_instance, instance_parts[1], *parts[3:]]
         else:
             parts = ['', 'eos', self.eos_instance, *parts[3:]]
-        self.eos_path = '/'.join(parts)
+        self.eos_path = '/'.join(parts) + '/' + self.name
         self.eos_path_full = f'{self.mgm}/{self.eos_path}'
         return self
 
@@ -225,6 +225,7 @@ class EosPath(FsPath, Path):
 
     def symlink_to(self, target, target_is_directory=False, **kwargs):
         _assert_eos_accessible("Cannot create symlinks on EOS paths.")
+        target = FsPath(target)
         result = _run_eos(['eos', self.mgm, 'ln', '-fns', self.eos_path,
                            target.as_posix()], **kwargs)
         if result[0]:
