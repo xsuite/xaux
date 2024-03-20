@@ -152,10 +152,15 @@ class EosPath(FsPath, Path):
 
     # Resolving EOS paths can be tricky due to different mount points.
     # Luckily, the path is already resolved at instantiation.
-    # TODO: should be with eos
+    # TODO: should be with eos?
     def resolve(self, *args, **kwargs):
-        # TODO: this does not resolve internal links; what if the file itself is a link...
-        return FsPath(Path(self.eos_path).resolve(), *args, **kwargs)
+        # We first resolve all internal symlinks
+        new_path = FsPath(_non_strict_resolve(Path(self.eos_path), as_posix=True), *args, **kwargs)
+        # And then we get back the correct EOS path
+        if isinstance(new_path, EosPath):
+            return EosPath(new_path.eos_path)
+        else:
+            return new_path
 
     def exists(self, *args, **kwargs):
         _assert_eos_accessible("Cannot check for existence of EOS paths.")
