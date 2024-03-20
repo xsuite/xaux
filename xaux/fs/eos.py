@@ -155,7 +155,7 @@ class EosPath(FsPath, Path):
     # TODO: should be with eos?
     def resolve(self, *args, **kwargs):
         # We first resolve all internal symlinks
-        new_path = FsPath(_non_strict_resolve(Path(self.eos_path), as_posix=True), *args, **kwargs)
+        new_path = FsPath(_non_strict_resolve(Path(self.eos_path), _as_posix=True), *args, **kwargs)
         # And then we get back the correct EOS path
         if isinstance(new_path, EosPath):
             return EosPath(new_path.eos_path)
