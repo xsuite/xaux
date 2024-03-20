@@ -37,7 +37,7 @@ class FsPath:
         else:
             return LocalPath.__new__(LocalPath, *args)
 
-    # FsPath is not as subclass of Path. We get the instance methods
+    # FsPath is not a subclass of Path. We get the instance methods
     # from Path via the derived classes (EosPath etc), but we have to
     # define the public class methods manually.
 
@@ -80,6 +80,9 @@ class FsPath:
         from .io import mv
         mv(self, dst, *args, **kwargs)
 
+    def size(self, *args, **kwargs):
+        return self.stat().st_size
+
 
 # To give regular Path objects the same functionality as FsPath objects
 class LocalPath(FsPath, Path):
@@ -93,8 +96,8 @@ class LocalPath(FsPath, Path):
             cls = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
         self = cls._from_parts(args)
         if not self._flavour.is_supported:
-            raise RuntimeError(f"cannot instantiate {cls.__name__} "
-                              + "on your system.")
+            raise OSError(f"cannot instantiate {cls.__name__} "
+                         + "on your system.")
         return self
 
 
@@ -108,7 +111,7 @@ class LocalPosixPath(LocalPath, PurePosixPath):
 
     if os.name == 'nt':
         def __new__(cls, *args, **kwargs):
-            raise RuntimeError(
+            raise OSError(
                 f"Cannot instantiate {cls.__name__!r} on your system")
 
 
@@ -122,6 +125,6 @@ class LocalWindowsPath(LocalPath, PureWindowsPath):
 
     if os.name != 'nt':
         def __new__(cls, *args, **kwargs):
-            raise RuntimeError(
+            raise OSError(
                 f"Cannot instantiate {cls.__name__!r} on your system")
 
