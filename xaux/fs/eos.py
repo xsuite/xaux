@@ -71,7 +71,7 @@ def _run_eos(eos_cmds, **kwargs):
             if _eos_mounted:
                 # We can retry with local FS
                 warnings.warn(stderr, RuntimeWarning)
-                return False
+                return False, ''
             else:
                 raise RuntimeError(stderr)
         if cmd.returncode == 0:
@@ -85,7 +85,7 @@ def _run_eos(eos_cmds, **kwargs):
             if _eos_mounted:
                 # We can retry with local FS
                 warnings.warn(stderr, RuntimeWarning)
-                return False
+                return False, ''
             else:
                 raise RuntimeError(stderr)
     elif _force_eos:
@@ -220,8 +220,8 @@ class EosPath(FsPath, Path):
 
     def symlink_to(self, target, target_is_directory=False, **kwargs):
         _assert_eos_accessible("Cannot create symlinks on EOS paths.")
-        result = _run_eos(['eos', self.mgm, 'ln', '-fns', target.as_posix(),
-                           self.eos_path], **kwargs)
+        result = _run_eos(['eos', self.mgm, 'ln', '-fns', self.eos_path,
+                           target.as_posix()], **kwargs)
         if result[0]:
             return result[1]
         return Path.symlink_to(self, target, target_is_directory)
