@@ -46,7 +46,7 @@ def test_touch_and_symlinks_eos_access():
     assert isinstance(path_link, EosPath)
     assert isinstance(path_broken_link, EosPath)
     for path in [path_file, path_link, path_broken_link]:
-        if path.exists():
+        if path.lexists():
             path.unlink()
     path_file.touch(exist_ok=False)
     path_link.symlink_to(path_file)

@@ -155,7 +155,7 @@ class EosPath(FsPath, Path):
     # TODO: should be with eos
     def resolve(self, *args, **kwargs):
         # TODO: this does not resolve internal links; what if the file itself is a link...
-        return EosPath(self.eos_path, *args, **kwargs)
+        return FsPath(Path(self.eos_path).resolve(), *args, **kwargs)
 
     def exists(self, *args, **kwargs):
         _assert_eos_accessible("Cannot check for existence of EOS paths.")

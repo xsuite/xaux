@@ -24,7 +24,7 @@ def test_touch_and_symlinks_local():
     path_link = Path(link)
     path_broken_link = Path(broken_link)
     for path in [path_file, path_link, path_broken_link]:
-        if path.exists():
+        if path.lexists():
             path.unlink()
     # Assert correct file creation with standard pathlib API
     path_file.touch(exist_ok=False)
