@@ -257,7 +257,7 @@ class EosPath(FsPath, Path):
         return FsPath.rmtree(self, *args, **kwargs)
 
     def size(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot rmtree EOS paths.")
+        _assert_eos_accessible("Cannot get size of EOS paths.")
         if not self.is_file():
             return 0
         result = _run_eos(['eos', self.mgm, 'stat', self.eos_path], **kwargs)
