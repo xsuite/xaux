@@ -50,12 +50,42 @@ def _on_eos(*args):
         elif args[0].startswith('root://eos'):
             return True
         elif args[0].startswith('root:'):
-            raise ValueError("Unknown path specification {args}.")
+            raise ValueError(f"Unknown path specification {args}.")
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'eos' or args[1] == 'eos/'):
             return True
     parents = _non_strict_resolve(Path(*args).absolute().parent).parents
     return len(parents) > 1 and parents[-2] == _eos_path
+
+def _parse_instance(eos_instance):
+    if eos_instance == 'home':
+        return 'user'
+    return eos_instance.lower()
+
+def _parse_mgm(_eos_mgm):
+    if not isinstance(_eos_mgm, str):
+        raise ValueError("The variable `_eos_mgm` should be a string.")
+    if not _eos_mgm.startswith('root:'):
+        raise ValueError("The variable `_eos_mgm` should start with 'root:'!")
+    parts = _eos_mgm.split('/')
+    if parts[1] != '' or not parts[2].startswith('eos'):
+        raise ValueError(f"Invalid EOS path specification: {_eos_mgm}. "
+                        + "The full path should start with 'root://eos...'.")
+    if len(parts) >= 3 and parts[3] != '':
+        raise ValueError(f"Invalid EOS path specification: {_eos_mgm}. "
+                        + "The full path should have a double slash // "
+                        + "in between the MGM and the path itself. \n"
+                        + "Example: 'root://eosuser.cern.ch//eos/user/s/...'.")
+    mgm_parts = parts[2].split('.')
+    eos_instance = _parse_instance(mgm_parts[0].replace('eos', ''))
+    if '.'.join(mgm_parts[1:]).lower() != EOS_CELL.lower():
+        raise ValueError(f"This instance is on the cell {mgm_parts[1:]}, "
+                       + f"but the code is configured for cell {EOS_CELL}. "
+                       + f"Please set `xaux.fs.eos.EOS_CELL = {mgm_parts[1:]}` "
+                       + f"after importing xaux.")
+    mgm = f'root://eos{eos_instance}.{EOS_CELL.lower()}'
+    eos_path = '/'.join(parts[3:]) if len(parts) >= 3 else None
+    return mgm, eos_instance, eos_path
 
 def _run_eos(eos_cmds, **kwargs):
     # Try to run the eos command. Returns a bool success and the stdout.
@@ -99,7 +129,16 @@ class EosPath(FsPath, Path):
     """
     __slots__ = ('mgm', 'eos_instance', 'eos_path', 'eos_path_full')
 
-    def __new__(cls, *args, _eos_checked=False):
+
+    @classmethod
+    def _new(cls, *args, _eos_checked=False):
+        self = cls._from_parts(args)
+        if not _eos_checked and not _on_eos(self):
+            raise ValueError("The path is not on EOS.")
+        return self
+
+
+    def __new__(cls, *args, _eos_checked=False, _eos_mgm=None):
         if cls is EosPath:
             cls = EosWindowsPath if os.name == 'nt' else EosPosixPath
         if isinstance(args[0], str) \
@@ -108,74 +147,71 @@ class EosPath(FsPath, Path):
                 raise ValueError("When specifying the instance `root://eos...` "
                                + "in the path, the latter has to be given as "
                                + "one complete string.")
-            parts = args[0].split('/')
-            if parts[1] != '' or not parts[2].startswith('eos') or parts[3] != '':
-                raise ValueError(f"Invalid EOS path specification: {args[0]}. "
-                                + "The full path should start with 'root://eos...'"
-                                + " and have a double slash // in between the MGM and "
-                                + "the path itself. \nExample: 'root://eosuser.cern.ch/"
-                                + "/eos/user/s/...'.")
-            mgm = '/'.join(parts[:3])
-            eos_instance = mgm.split('/')[2].split('.')[0].replace('eos', '')
-            self = cls._from_parts(['/'.join(parts[3:])])
+            mgm, eos_instance, eos_path = _parse_mgm(args[0])
+            if eos_path is None:
+                raise ValueError("When specifying the instance `root://eos...` "
+                               + "in the path, the latter has to be given as "
+                               + "one complete string.")
+            self = cls._new(eos_path)
+            self._set_eos_path(_eos_instance=eos_instance)
+            if _eos_mgm is not None and mgm != _parse_mgm(_eos_mgm)[0]:
+                raise ValueError(f"The specified MGM {_eos_mgm} does not match "
+                               + f"the resolved one {mgm}.")
             self.mgm = mgm
-            self.eos_instance = eos_instance
-            assert self.mgm == f'root://eos{self.eos_instance}.{EOS_CELL}'
         else:
-            self = cls._from_parts(args)
-            self.eos_instance = _non_strict_resolve(self, _as_posix=True
-                                                    ).split('/')[2].split('-')[0]
+            self = cls._new(*args)
+            if _eos_mgm is not None:
+                mgm, eos_instance, _ = _parse_mgm(_eos_mgm)
+                self._set_eos_path(_eos_instance=eos_instance)
+                self.mgm = mgm
+            else:
+                self._set_eos_path()
+                self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL.lower()}'        
+        self.eos_path_full = f'{self.mgm}/{self.eos_path}'
+
         if not self._flavour.is_supported:
             raise OSError(f"Cannot instantiate {cls.__name__} "
                          + "on your system.")
-        if not _eos_checked and not _on_eos(self):
-            raise ValueError("The path is not on EOS.")
-        if self.eos_instance == 'home':
-            self.eos_instance = 'user'
-        self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL}'
+
+        return self
+
+
+    def _set_eos_path(self, _eos_instance=None):
         parts = _non_strict_resolve(self.parent, _as_posix=True).split('/')
         instance_parts = parts[2].split('-')
+        eos_instance = _parse_instance(instance_parts[0])
+        if _eos_instance is not None and eos_instance != _eos_instance:
+            raise ValueError(f"This path is on the EOS instance {eos_instance}, "
+                           + f"however, the MGM specified it as {_eos_instance}.")
         if len(instance_parts) > 1:
             if len(instance_parts) > 2:
                 raise ValueError(f"EOS instance {parts[2]} has more than one dash.")
             else:
-                parts = ['', 'eos', self.eos_instance, instance_parts[1], *parts[3:]]
+                parts = ['', 'eos', eos_instance, instance_parts[1], *parts[3:]]
         else:
-            parts = ['', 'eos', self.eos_instance, *parts[3:]]
+            parts = ['', 'eos', eos_instance, *parts[3:]]
         self.eos_path = '/'.join(parts) + '/' + self.name
-        self.eos_path_full = f'{self.mgm}/{self.eos_path}'
-        return self
+        self.eos_instance = eos_instance
 
 
     # Overwrite Path methods
     # ======================
 
-    # Resolving EOS paths can be tricky due to different mount points.
-    # Luckily, the path is already resolved at instantiation.
-    # TODO: should be with eos?
-    def resolve(self, *args, **kwargs):
-        # We first resolve all internal symlinks
-        new_path = FsPath(_non_strict_resolve(Path(self.eos_path), _as_posix=True), *args, **kwargs)
-        # And then we get back the correct EOS path
-        if isinstance(new_path, EosPath):
-            return EosPath(new_path.eos_path)
-        else:
-            return new_path
-
     def exists(self, *args, **kwargs):
+        if self.is_symlink():
+            return self.resolve().exists()
         _assert_eos_accessible("Cannot check for existence of EOS paths.")
-        result = _run_eos(['eos', self.mgm, 'ls', self.eos_path], 
+        d = ['-d'] if self.is_dir() else []
+        result = _run_eos(['eos', self.mgm, 'ls', *d, self.eos_path], 
                            _false_if_stderr_contains='No such file or directory', **kwargs)
         if result[0]:
-            return result[1]
-        return Path(self.eos_path).exists(self, *args, **kwargs)
+            if not result[1]:
+                return False
+            return result[1] == self.name or result[1].endswith('/' + self.name)
+        return Path(self.eos_path).exists(*args, **kwargs)
 
     def stat(self, *args, **kwargs):
         _assert_eos_accessible("Cannot stat EOS paths.")
-        if _eos_installed and not kwargs.get('_skip_eos', False):
-            if kwargs.get('follow_symlinks', True):
-                # TODO: need a follow link method or so
-                print(f"Warning: `follow_symlinks` is not yet implemented for EOS paths.")
         result = _run_eos(['eos', self.mgm, 'stat', self.eos_path],
                            _false_if_stderr_contains='failed to stat', **kwargs)
         if result[0]:
@@ -185,7 +221,8 @@ class EosPath(FsPath, Path):
         return Path.stat(self, *args, **kwargs)
 
     def is_file(self, *args, **kwargs):
-        # TODO: need to follow symlink?
+        if self.is_symlink():
+            return self.resolve().is_file()
         _assert_eos_accessible("Cannot test if EOS path is file.")
         result = _run_eos(['eos', self.mgm, 'stat', self.eos_path],
                            _false_if_stderr_contains='failed to stat', **kwargs)
@@ -196,7 +233,8 @@ class EosPath(FsPath, Path):
         return Path.is_file(self, *args, **kwargs)
 
     def is_dir(self, *args, **kwargs):
-        # TODO: need to follow symlink?
+        if self.is_symlink():
+            return self.resolve().is_dir()
         _assert_eos_accessible("Cannot test if EOS path is dir.")
         result = _run_eos(['eos', self.mgm, 'stat', self.eos_path],
                            _false_if_stderr_contains='failed to stat', **kwargs)

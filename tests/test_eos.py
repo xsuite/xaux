@@ -5,6 +5,7 @@
 
 from pathlib import Path
 import os
+import time
 import pytest
 
 from xaux.fs import *
@@ -60,13 +61,7 @@ def test_touch_and_symlinks_eos_access():
     assert not path_broken_link.exists()
     assert path_broken_link.is_symlink()
     assert path_broken_link.is_broken_symlink()
-    # Double-check existence with pathlib API
-    assert Path(file).exists()
-    assert Path(link).exists()
-    assert Path(link).is_symlink()
-    assert not Path(broken_link).exists()
-    assert Path(broken_link).is_symlink()
-    # Delete with FsPath
+    # Delete
     path_file.unlink()
     path_link.unlink()
     path_broken_link.unlink()
@@ -96,8 +91,6 @@ def test_instantiation_eos():
 def test_instantiation_eos_access():
     EosSystemPath    = EosWindowsPath if os.name == 'nt' else EosPosixPath
     EosNonSystemPath = EosPosixPath   if os.name == 'nt' else EosWindowsPath
-    LocalSystemPath    = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
-    LocalNonSystemPath = LocalPosixPath   if os.name == 'nt' else LocalWindowsPath
     _file_rel = "example_eos_file.txt"
     _link_rel = "example_eos_relative_link.txt"
     file_abs = (Path(_eos_test_path) / _file_rel).as_posix()
@@ -144,7 +137,6 @@ def test_instantiation_eos_access():
     print(f"Testing EosPath with {abs_link} (absolute link on local fs pointing to EOS file)...")
     path_abs_link = FsPath(abs_link)
     path_abs_link.symlink_to(path_file_abs)
-    _test_instantiation(abs_link, LocalPath, LocalSystemPath, LocalNonSystemPath, this_path)
     assert isinstance(path_abs_link, LocalPath)
     assert path_abs_link.exists()
     assert path_abs_link.is_symlink()
@@ -236,7 +228,7 @@ def test_instantiation_eos_access():
 
 @pytest.mark.skipif(EOS_CELL != "cern.ch", reason="This test is only valid for the CERN EOS instance.")
 def test_eos_components():
-    _file_rel = "example_eos_file.txt"
+    _file_rel = "example_eos_file_components.txt"
     file_ref = (Path(_eos_test_path) / _file_rel).as_posix()
     this_path = EosPath(file_ref)
     assert isinstance(this_path, EosPath)

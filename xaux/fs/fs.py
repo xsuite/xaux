@@ -49,17 +49,33 @@ class FsPath:
     def home(cls):
         return cls(Path.home())
 
-    def resolve(self, *args, follow_symlink=True, **kwargs):
-        return FsPath(Path.resolve(self))
-        # if self.is_symlink() and follow_symlink:
-        #     print(f"Resolving symlink:  {self=}  {os.readlink(self)}   {Path.resolve(self)}")
-        #     return FsPath(os.readlink(self)).resolve()
-        # else:
-        #     print(f"Resolving path:  {self=}   ns={_non_strict_resolve(Path(self).absolute().parent, _as_posix=True)}")
-        #     return FsPath(_non_strict_resolve(
-        #         Path(self).absolute().parent, _as_posix=True), self.name)
+
+    # Overwrite Path methods
+    # ======================
+
+    # Resolving EOS paths can be tricky due to different mount points.
+    # Luckily, the path is already resolved at instantiation.
+    def resolve(self, *args, **kwargs):
+        # We first resolve all internal symlinks
+        from .eos import EosPath
+        if isinstance(self, EosPath):
+            new_path = FsPath(_non_strict_resolve(Path(self.eos_path), _as_posix=True))
+        else:
+            new_path = FsPath(Path.resolve(self))
+        # And then we get back the correct EOS path
+        if isinstance(new_path, EosPath):
+            return EosPath(new_path.eos_path)
+        else:
+            return new_path
+
+    def exists(self, *args, **kwargs):
+        if self.is_symlink():
+            return self.resolve().exists()
+        return Path.exists(self, *args, **kwargs)
+
 
     # New methods
+    # ===========
 
     def lexists(self):
         return self.is_symlink() or self.exists()
