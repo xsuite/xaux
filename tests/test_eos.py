@@ -9,7 +9,7 @@ import time
 import pytest
 
 from xaux.fs import *
-from xaux.fs.eos import EOS_CELL
+from xaux import EOS_CELL
 
 from test_fs import _test_instantiation, _afs_test_path, _eos_test_path
 

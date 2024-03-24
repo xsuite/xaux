@@ -4,44 +4,12 @@
 # ######################################### #
 
 import os
-from subprocess import run, PIPE, CalledProcessError
 from pathlib import Path, PurePosixPath, PureWindowsPath
-import warnings
 
 from .fs import FsPath, _non_strict_resolve
-
-EOS_CELL = 'cern.ch'
-
-_eos_path = Path('/eos')
-
-_eos_arg_for_find = 'find'
-_eos_installed = False
-if os.name != 'nt':
-    try:
-        cmd = run(['eos', '--version'], stdout=PIPE, stderr=PIPE)
-        # Temporary hack as the eos command wrongly returns 255
-        _eos_installed =  cmd.returncode == 0 or cmd.returncode == 255
-
-        if _eos_installed:
-            # The command `eos find` has the wrong behaviour on new machines (running eos 5.2).
-            # For this reason, the command `eos oldfind` has been introduced.
-            # However, this command does not exist on the old machines, so in that case we
-            # default back to `eos find`. This function gives the correct argument for eos find.
-            cmd = run(['eos', 'oldfind'], stdout=PIPE,
-                                stderr=PIPE)
-            if cmd.returncode != 255:
-                # Command found; we are running on a machine running new eos >= 5.2
-                _eos_arg_for_find = 'oldfind'
-    except (CalledProcessError, FileNotFoundError):
-        _eos_installed = False
-
-_eos_mounted = _eos_path.exists()
-eos_accessible = _eos_mounted or _eos_installed
-
-def _assert_eos_accessible(mess=None):
-    if not eos_accessible:
-        mess = f" {mess}" if mess is not None else mess
-        raise OSError(f"EOS is not installed on your system.{mess}")
+from .eos_methods import _eos_path, _eos_exists, _eos_lstat, _eos_is_file, \
+                         _eos_is_dir, _eos_is_symlink, _eos_touch, _eos_symlink_to, \
+                         _eos_unlink, _eos_rmdir, _eos_rmtree, _eos_size
 
 def _on_eos(*args):
     if isinstance(args[0], str):
@@ -54,7 +22,7 @@ def _on_eos(*args):
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'eos' or args[1] == 'eos/'):
             return True
-    parents = _non_strict_resolve(Path(*args).absolute().parent).parents
+    parents = list(_non_strict_resolve(Path(*args).absolute().parent).parents)
     return len(parents) > 1 and parents[-2] == _eos_path
 
 def _parse_instance(eos_instance):
@@ -63,6 +31,7 @@ def _parse_instance(eos_instance):
     return eos_instance.lower()
 
 def _parse_mgm(_eos_mgm):
+    from xaux import EOS_CELL
     if not isinstance(_eos_mgm, str):
         raise ValueError("The variable `_eos_mgm` should be a string.")
     if not _eos_mgm.startswith('root:'):
@@ -81,45 +50,11 @@ def _parse_mgm(_eos_mgm):
     if '.'.join(mgm_parts[1:]).lower() != EOS_CELL.lower():
         raise ValueError(f"This instance is on the cell {mgm_parts[1:]}, "
                        + f"but the code is configured for cell {EOS_CELL}. "
-                       + f"Please set `xaux.fs.eos.EOS_CELL = {mgm_parts[1:]}` "
+                       + f"Please set `xaux.EOS_CELL = {mgm_parts[1:]}` "
                        + f"after importing xaux.")
     mgm = f'root://eos{eos_instance}.{EOS_CELL.lower()}'
     eos_path = '/'.join(parts[3:]) if len(parts) >= 3 else None
     return mgm, eos_instance, eos_path
-
-def _run_eos(eos_cmds, **kwargs):
-    # Try to run the eos command. Returns a bool success and the stdout.
-    _skip_eos  = kwargs.pop('_skip_eos', False)
-    _force_eos = kwargs.pop('_force_eos', False)
-    _false_if_stderr_contains = kwargs.pop('_false_if_stderr_contains', None)
-    if _eos_installed and not _skip_eos:
-        stderr = f"Failed {' '.join(eos_cmds)}.\n"
-        try:
-            cmd = run(eos_cmds, stdout=PIPE, stderr=PIPE)
-        except Exception as e:
-            stderr += repr(e)
-            if _eos_mounted:
-                # We can retry with local FS
-                warnings.warn(stderr, RuntimeWarning)
-                return False, ''
-            else:
-                raise RuntimeError(stderr)
-        if cmd.returncode == 0:
-            stdout = cmd.stdout.decode('UTF-8').strip()
-            return True, stdout
-        else:
-            stderr += cmd.stderr.decode('UTF-8').strip()
-            if _false_if_stderr_contains is not None:
-                if _false_if_stderr_contains in stderr:
-                    return True, False
-            if _eos_mounted:
-                # We can retry with local FS
-                warnings.warn(stderr, RuntimeWarning)
-                return False, ''
-            else:
-                raise RuntimeError(stderr)
-    elif _force_eos:
-        raise OSError("EOS is not installed on your system.")
 
 
 class EosPath(FsPath, Path):
@@ -132,7 +67,10 @@ class EosPath(FsPath, Path):
 
     @classmethod
     def _new(cls, *args, _eos_checked=False):
-        self = cls._from_parts(args)
+        try:
+            self = cls._from_parts(args)
+        except AttributeError:
+            self = object.__new__(cls)
         if not _eos_checked and not _on_eos(self):
             raise ValueError("The path is not on EOS.")
         return self
@@ -165,14 +103,14 @@ class EosPath(FsPath, Path):
                 self._set_eos_path(_eos_instance=eos_instance)
                 self.mgm = mgm
             else:
+                from xaux import EOS_CELL
                 self._set_eos_path()
-                self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL.lower()}'        
+                self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL.lower()}'
         self.eos_path_full = f'{self.mgm}/{self.eos_path}'
-
-        if not self._flavour.is_supported:
-            raise OSError(f"Cannot instantiate {cls.__name__} "
-                         + "on your system.")
-
+        # try:
+        #     self._accessor.scandir = scandir
+        # except AttributeError:
+        #     self._scandir = scandir
         return self
 
 
@@ -199,116 +137,54 @@ class EosPath(FsPath, Path):
 
     def exists(self, *args, **kwargs):
         if self.is_symlink():
-            return self.resolve().exists()
-        _assert_eos_accessible("Cannot check for existence of EOS paths.")
-        d = ['-d'] if self.is_dir() else []
-        result = _run_eos(['eos', self.mgm, 'ls', *d, self.eos_path], 
-                           _false_if_stderr_contains='No such file or directory', **kwargs)
-        if result[0]:
-            if not result[1]:
-                return False
-            return result[1] == self.name or result[1].endswith('/' + self.name)
-        return Path(self.eos_path).exists(*args, **kwargs)
+            return self.resolve().exists(*args, **kwargs)
+        return _eos_exists(self, *args, **kwargs)
 
     def stat(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot stat EOS paths.")
-        result = _run_eos(['eos', self.mgm, 'stat', self.eos_path],
-                           _false_if_stderr_contains='failed to stat', **kwargs)
-        if result[0]:
-            if not result[1]:
-                raise FileNotFoundError
-            return result[1]
-        return Path.stat(self, *args, **kwargs)
+        if self.is_symlink():
+            return self.resolve().stat(*args, **kwargs)
+        return _eos_lstat(self, *args, **kwargs)
+
+    def lstat(self, *args, **kwargs):
+        return _eos_lstat(self, *args, **kwargs)
 
     def is_file(self, *args, **kwargs):
         if self.is_symlink():
-            return self.resolve().is_file()
-        _assert_eos_accessible("Cannot test if EOS path is file.")
-        result = _run_eos(['eos', self.mgm, 'stat', self.eos_path],
-                           _false_if_stderr_contains='failed to stat', **kwargs)
-        if result[0]:
-            if not result[1]:
-                return False
-            return result[1].endswith(' regular file')
-        return Path.is_file(self, *args, **kwargs)
+            return self.resolve().is_file(*args, **kwargs)
+        return _eos_is_file(self, *args, **kwargs)
 
     def is_dir(self, *args, **kwargs):
         if self.is_symlink():
-            return self.resolve().is_dir()
-        _assert_eos_accessible("Cannot test if EOS path is dir.")
-        result = _run_eos(['eos', self.mgm, 'stat', self.eos_path],
-                           _false_if_stderr_contains='failed to stat', **kwargs)
-        if result[0]:
-            if not result[1]:
-                return False
-            return result[1].endswith(' directory')
-        return Path.is_dir(self, *args, **kwargs)
+            return self.resolve().is_dir(*args, **kwargs)
+        return _eos_is_dir(self, *args, **kwargs)
 
     def is_symlink(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot test if EOS path is symlink.")
-        result = _run_eos(['eos', self.mgm, 'stat', self.eos_path],
-                           _false_if_stderr_contains='failed to stat', **kwargs)
-        if result[0]:
-            if not result[1]:
-                return False
-            return result[1].endswith(' symbolic link')
-        return Path.is_symlink(self, *args, **kwargs)
+        return _eos_is_symlink(self, *args, **kwargs)
 
     def touch(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot touch EOS paths.")
-        result = _run_eos(['eos', self.mgm, 'touch', self.eos_path], **kwargs)
-        if result[0]:
-            return result[1]
-        return Path.touch(self, *args, **kwargs)
+        return _eos_touch(self, *args, **kwargs)
 
     def symlink_to(self, target, target_is_directory=False, **kwargs):
-        _assert_eos_accessible("Cannot create symlinks on EOS paths.")
         target = FsPath(target)
-        result = _run_eos(['eos', self.mgm, 'ln', '-fns', self.eos_path,
-                           target.as_posix()], **kwargs)
-        if result[0]:
-            return result[1]
-        return Path.symlink_to(self, target, target_is_directory)
+        return _eos_symlink_to(self, target, target_is_directory=target_is_directory, **kwargs)
 
     def unlink(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot unlink EOS paths.")
-        if self.is_dir():
-            raise IsADirectoryError(f"{self} is a directory.")
-        result = _run_eos(['eos', self.mgm, 'rm', self.eos_path], **kwargs)
-        if result[0]:
-            return result[1]
-        return Path.unlink(self, *args, **kwargs)
+        return _eos_unlink(self, *args, **kwargs)
 
     def rmdir(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot rmdir EOS paths.")
-        if not self.is_dir():
-            raise NotADirectoryError(f"{self} is not a directory.")
-        result = _run_eos(['eos', self.mgm, 'rmdir', self.eos_path], **kwargs)
-        if result[0]:
-            return result[1]
-        return Path.rmdir(self, *args, **kwargs)
+        return _eos_rmdir(self, *args, **kwargs)
+
+# mkdir
 
 
     # Overwrite FsPath methods
     # ======================
 
     def rmtree(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot rmtree EOS paths.")
-        if not self.is_dir():
-            raise NotADirectoryError(f"{self} is not a directory.")
-        result = _run_eos(['eos', self.mgm, 'rm', '-r', self.eos_path], **kwargs)
-        if result[0]:
-            return result[1]
-        return FsPath.rmtree(self, *args, **kwargs)
+        return _eos_rmtree(self, FsPath, *args, **kwargs)
 
     def size(self, *args, **kwargs):
-        _assert_eos_accessible("Cannot get size of EOS paths.")
-        if not self.is_file():
-            return 0
-        result = _run_eos(['eos', self.mgm, 'stat', self.eos_path], **kwargs)
-        if result[0]:
-            return int(result[1].split()[3])
-        return FsPath.size(self, *args, **kwargs)
+        return _eos_size(self, FsPath, *args, **kwargs)
 
 
 class EosPosixPath(EosPath, PurePosixPath):

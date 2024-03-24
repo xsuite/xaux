@@ -15,7 +15,10 @@ def _non_strict_resolve(path, _as_posix=False):
         path = Path(path)
     cls = path.__class__
     path = path.expanduser().as_posix()
-    path = os.path.realpath(path, strict=False)
+    try:
+        path = os.path.realpath(path, strict=False)
+    except TypeError:
+        path = os.path.realpath(path)
     if _as_posix:
         return path
     else:
@@ -110,10 +113,10 @@ class LocalPath(FsPath, Path):
     def __new__(cls, *args):
         if cls is LocalPath:
             cls = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
-        self = cls._from_parts(args)
-        if not self._flavour.is_supported:
-            raise OSError(f"cannot instantiate {cls.__name__} "
-                         + "on your system.")
+        try:
+            self = cls._from_parts(args)
+        except AttributeError:
+            self = object.__new__(cls)
         return self
 
 

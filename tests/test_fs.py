@@ -8,7 +8,7 @@ import os
 import pytest
 
 from xaux.fs import *
-from xaux.fs.eos import EOS_CELL
+from xaux import EOS_CELL
 from xaux.fs.afs import _fs_installed
 
 

@@ -38,7 +38,7 @@ def _on_afs(*args):
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'afs' or args[1] == 'afs/'):
             return True
-    parents = _non_strict_resolve(Path(*args).absolute().parent).parents
+    parents = list(_non_strict_resolve(Path(*args).absolute().parent).parents)
     return len(parents) > 1 and parents[-2] == _afs_path
 
 
@@ -52,11 +52,11 @@ class AfsPath(FsPath, Path):
     def __new__(cls, *args, _afs_checked=False):
         if cls is AfsPath:
             cls = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
-        self = cls._from_parts(args)
+        try:
+            self = cls._from_parts(args)
+        except AttributeError:
+            self = object.__new__(cls)
         self.afs_cell = _non_strict_resolve(self, _as_posix=True).split('/')[2].upper()
-        if not self._flavour.is_supported:
-            raise OSError(f"cannot instantiate {cls.__name__} "
-                         + "on your system.")
         if not _afs_checked and not _on_afs(self):
             raise ValueError("The path is not on AFS.")
         return self

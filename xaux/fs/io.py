@@ -10,7 +10,8 @@ from subprocess import run, PIPE, CalledProcessError
 import warnings
 
 from .fs import FsPath
-from .eos import EosPath, _assert_eos_accessible, _eos_installed
+from .eos import EosPath
+from .eos_methods import _assert_eos_accessible, _eos_installed
 from .temp import _tempdir
 
 # TODO: check symlinks etc
