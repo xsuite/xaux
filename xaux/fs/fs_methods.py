@@ -28,7 +28,7 @@ def make_stat_result(stat_dict):
     for key, val in stat_dict.items():
         if key in _stat_idx:
             for st in _stat_idx[key]:
-                stats[st] = val
+                stats[st] = int(val)
     return os.stat_result(tuple(stats))
 
 

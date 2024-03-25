@@ -71,36 +71,63 @@ class FsPath:
         else:
             return new_path
 
+    def touch(self, *args, **kwargs):
+        return Path.touch(self, *args, **kwargs)
+
     def exists(self, *args, **kwargs):
-        if self.is_symlink():
-            return self.resolve().exists()
+        if self.is_symlink(*args, **kwargs):
+            return self.resolve(*args, **kwargs).exists(*args, **kwargs)
         return Path.exists(self, *args, **kwargs)
 
+    def symlink_to(self, target, target_is_directory=False, **kwargs):
+        target = FsPath(target)
+        return Path.symlink_to(self.resolve(**kwargs), target,
+                                 target_is_directory=target.is_dir(**kwargs), **kwargs)
+
+    def __truediv__(self, key):
+        return FsPath(Path.__truediv__(self,key))
+
+    def __rtruediv__(self, key):
+        return FsPath(Path.__rtruediv__(self,key))
+
+    def unlink(self, *args, **kwargs):
+        if not self.is_symlink(*args, **kwargs) and self.is_dir(*args, **kwargs):
+            raise IsADirectoryError(f"{self} is a directory.")
+        Path.unlink(self, *args, **kwargs)
+
+    def rmdir(self, *args, **kwargs):
+        if not self.is_dir(*args, **kwargs):
+            raise NotADirectoryError(f"{self} is not a directory.")
+        Path.rmdir(self, *args, **kwargs)
+
+    # TODO mv and rename replace etc
 
     # New methods
     # ===========
 
-    def lexists(self):
-        return self.is_symlink() or self.exists()
+    def lexists(self, *args, **kwargs):
+        return self.is_symlink(*args, **kwargs) or self.exists(*args, **kwargs)
 
-    def is_broken_symlink(self):
-        return self.is_symlink() and not self.exists()
+    def is_broken_symlink(self, *args, **kwargs):
+        return self.is_symlink(*args, **kwargs) and not self.exists(*args, **kwargs)
 
     def rmtree(self, *args, **kwargs):
-        if not self.is_dir():
+        if not self.is_dir(*args, **kwargs):
             raise NotADirectoryError(f"{self} is not a directory.")
-        rmtree(self.resolve().as_posix(), *args, **kwargs)
+        rmtree(self.resolve(*args, **kwargs).as_posix(*args, **kwargs), *args, **kwargs)
 
-    def copy_to(self, dst, *args, **kwargs):
+    def copy_to(self, dst, recursive=None, *args, **kwargs):
         from .io import cp
-        cp(self, dst, *args, **kwargs)
+        if recursive is None:
+            recursive = self.is_dir(*args, **kwargs)
+        cp(self, dst, *args, recursive=recursive, **kwargs)
 
     def move_to(self, dst, *args, **kwargs):
         from .io import mv
         mv(self, dst, *args, **kwargs)
 
     def size(self, *args, **kwargs):
-        return self.stat().st_size
+        return self.stat(*args, **kwargs).st_size
 
 
 # To give regular Path objects the same functionality as FsPath objects
@@ -114,9 +141,9 @@ class LocalPath(FsPath, Path):
         if cls is LocalPath:
             cls = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
         try:
-            self = cls._from_parts(args)
+            self = cls._from_parts(args).expanduser()
         except AttributeError:
-            self = object.__new__(cls)
+            self = object.__new__(cls).expanduser()
         return self
 
 

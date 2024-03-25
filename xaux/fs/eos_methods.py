@@ -14,6 +14,15 @@ from .fs_methods import make_stat_result, size_expand
 
 _eos_path = Path('/eos')
 
+
+_xrdcp_installed = False
+if os.name != 'nt':
+    try:
+        cmd = run(["xrdcp", "--version"], stdout=PIPE, stderr=PIPE)
+        _xrdcp_installed = cmd.returncode == 0
+    except (CalledProcessError, FileNotFoundError):
+        _xrdcp_installed = False
+
 _eos_arg_for_find = 'find'
 _eos_installed = False
 if os.name != 'nt':
@@ -36,7 +45,7 @@ if os.name != 'nt':
         _eos_installed = False
 
 _eos_mounted = _eos_path.exists()
-eos_accessible = _eos_mounted or _eos_installed
+eos_accessible = _eos_mounted or _eos_installed or _xrdcp_installed
 
 def _assert_eos_accessible(mess=None):
     if not eos_accessible:
@@ -44,12 +53,11 @@ def _assert_eos_accessible(mess=None):
         raise OSError(f"EOS is not installed on your system.{mess}")
 
 
-def _run_eos(eos_cmds, **kwargs):
+def _run_eos(eos_cmds, _force=False, **kwargs):
+    from xaux.fs import _skip_eos, _force_eos, _force_xrdcp
     # Try to run the eos command. Returns a bool success and the stdout.
-    _skip_eos  = kwargs.pop('_skip_eos', False)
-    _force_eos = kwargs.pop('_force_eos', False)
-    _false_if_stderr_contains = kwargs.pop('_false_if_stderr_contains', None)
     if _eos_installed and not _skip_eos:
+        _false_if_stderr_contains = kwargs.pop('_false_if_stderr_contains', None)
         stderr = f"Failed {' '.join(eos_cmds)}.\n"
         try:
             cmd = run(eos_cmds, stdout=PIPE, stderr=PIPE)
@@ -60,7 +68,7 @@ def _run_eos(eos_cmds, **kwargs):
                 warnings.warn(stderr, RuntimeWarning)
                 return False, ''
             else:
-                raise RuntimeError(stderr)
+                raise OSError(stderr)
         if cmd.returncode == 0:
             stdout = cmd.stdout.decode('UTF-8').strip()
             return True, stdout
@@ -74,15 +82,17 @@ def _run_eos(eos_cmds, **kwargs):
                 warnings.warn(stderr, RuntimeWarning)
                 return False, ''
             else:
-                raise RuntimeError(stderr)
-    elif _force_eos:
-        raise OSError("EOS is not installed on your system.")
+                raise OSError(stderr)
+    elif _force:
+        raise OSError("The command `eos` is not installed on your system.")
+    else:
+        return False, None
 
 
 def is_egroup_member(egroup, verbose=False):
-    from xaux import EOS_CELL, default_eos_instance
+    from xaux.fs import EOS_CELL, default_eos_instance
     result = _run_eos(['eos', f'root://eos{default_eos_instance}.{EOS_CELL}', 
-                       'member', egroup], _force_eos=True)
+                       'member', egroup], _force=True)
     out = result[1].split()
     is_member = [f.split('=')[1] for f in out if f.startswith('member=')][0] == 'true'
     if verbose:
@@ -124,7 +134,7 @@ def _get_type(path, *args, **kwargs):
         elif result[1].endswith(' symbolic link'):
             return stat.S_IFLNK, None
         else:
-            raise ValueError(f"File type not known. Output:\n{result[1]}")
+            raise NotImplementedError(f"File type not known. Output:\n{result[1]}")
     return None, None
 
 def _eos_is_file(path, *args, **kwargs):
@@ -249,37 +259,42 @@ def _eos_touch(path, *args, **kwargs):
         return result[1]
     return Path.touch(path, *args, **kwargs)
 
-def _eos_symlink_to(path, target, target_is_directory=False, **kwargs):
-    _assert_eos_accessible("Cannot create symlinks on EOS paths.")
-    result = _run_eos(['eos', path.mgm, 'ln', '-fns', path.eos_path,
-                        target.as_posix()], **kwargs)
-    if result[0]:
-        return result[1]
-    return Path.symlink_to(path, target, target_is_directory)
-
 def _eos_unlink(path, *args, **kwargs):
     _assert_eos_accessible("Cannot unlink EOS paths.")
-    if path.is_dir():
+    if not path.is_symlink() and path.is_dir():
         raise IsADirectoryError(f"{path} is a directory.")
     result = _run_eos(['eos', path.mgm, 'rm', path.eos_path], **kwargs)
     if result[0]:
         return result[1]
     return Path.unlink(path, *args, **kwargs)
 
+def _eos_mkdir(path, *args, **kwargs):
+    _assert_eos_accessible("Cannot rmdir EOS paths.")
+    result = _run_eos(['eos', path.mgm, 'mkdir', path.eos_path], **kwargs)
+    if result[0]:
+        return result[1]
+    return Path.mkdir(path, *args, **kwargs)
+
 def _eos_rmdir(path, *args, **kwargs):
     _assert_eos_accessible("Cannot rmdir EOS paths.")
-    if not path.is_dir():
+    if path.is_symlink() or not path.is_dir():
         raise NotADirectoryError(f"{path} is not a directory.")
     result = _run_eos(['eos', path.mgm, 'rmdir', path.eos_path], **kwargs)
     if result[0]:
         return result[1]
     return Path.rmdir(path, *args, **kwargs)
 
-# mkdir
-
 
 # Overwrite FsPath methods
 # ======================
+
+def _eos_symlink_to(path, def_cls, target, target_is_directory=False, **kwargs):
+    _assert_eos_accessible("Cannot create symlinks on EOS paths.")
+    result = _run_eos(['eos', path.mgm, 'ln', '-fns', path.eos_path,
+                        target.as_posix()], **kwargs)
+    if result[0]:
+        return result[1]
+    return FsPath.symlink_to(path, target, target_is_directory)
 
 def _eos_rmtree(path, def_cls, *args, **kwargs):
     _assert_eos_accessible("Cannot rmtree EOS paths.")
@@ -298,3 +313,4 @@ def _eos_size(path, def_cls, *args, **kwargs):
     if result[0]:
         return int(result[1].split()[3])
     return def_cls.size(path, *args, **kwargs)
+

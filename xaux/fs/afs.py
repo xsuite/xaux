@@ -33,12 +33,12 @@ def _assert_afs_accessible(mess=None):
 
 def _on_afs(*args):
     if isinstance(args[0], str):
-        if args[0].startswith('/afs/'):
+        if args[0] == '/afs' or args[0].startswith('/afs/'):
             return True
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'afs' or args[1] == 'afs/'):
             return True
-    parents = list(_non_strict_resolve(Path(*args).absolute().parent).parents)
+    parents = list(_non_strict_resolve(Path(*args).expanduser().absolute().parent).parents)
     return len(parents) > 1 and parents[-2] == _afs_path
 
 
@@ -53,9 +53,9 @@ class AfsPath(FsPath, Path):
         if cls is AfsPath:
             cls = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
         try:
-            self = cls._from_parts(args)
+            self = cls._from_parts(args).expanduser()
         except AttributeError:
-            self = object.__new__(cls)
+            self = object.__new__(cls).expanduser()
         self.afs_cell = _non_strict_resolve(self, _as_posix=True).split('/')[2].upper()
         if not _afs_checked and not _on_afs(self):
             raise ValueError("The path is not on AFS.")
@@ -89,21 +89,21 @@ class AfsPath(FsPath, Path):
             output = cmd.stdout.decode('UTF-8').strip()
             lines = output.split('\n')
             if FsPath(lines[0].split()[-2]).resolve() != self.resolve():
-                raise RuntimeError(f"Cannot interpret ACL output.\n{output}")
+                raise OSError(f"Cannot interpret ACL output.\n{output}")
             for line in lines[1:]:
                 if line.startswith('  '):
                     parts = line.split()
                     acl[parts[0]] = parts[1]
                     if len(parts) > 2:
-                        raise RuntimeError(f"Cannot interpret ACL output.\n{output}")
+                        raise OSError(f"Cannot interpret ACL output.\n{output}")
                 elif line != 'Normal rights:':
-                    raise RuntimeError(f"Cannot interpret ACL output.\n{output}")
+                    raise OSError(f"Cannot interpret ACL output.\n{output}")
             if acl == {}:
-                raise RuntimeError(f"Cannot interpret ACL output.\n{output}")
+                raise OSError(f"Cannot interpret ACL output.\n{output}")
             return acl
         else:
             stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
-            raise RuntimeError(f"Failed to retrieve ACL on {self}.\n{stderr}")
+            raise OSError(f"Failed to retrieve ACL on {self}.\n{stderr}")
 
     @acl.setter
     def acl(self, val):
@@ -121,7 +121,7 @@ class AfsPath(FsPath, Path):
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if cmd.returncode != 0:
                 stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
-                raise RuntimeError(f"Failed to set ACL to {acl} on {self} for user "
+                raise OSError(f"Failed to set ACL to {acl} on {self} for user "
                                  + f"{user}.\n{stderr}")
 
     @acl.deleter
@@ -131,7 +131,7 @@ class AfsPath(FsPath, Path):
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if cmd.returncode != 0:
             stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
-            raise RuntimeError(f"Failed to delete ACL on {self}.\n{stderr}")
+            raise OSError(f"Failed to delete ACL on {self}.\n{stderr}")
 
 
 class AfsPosixPath(AfsPath, PurePosixPath):
