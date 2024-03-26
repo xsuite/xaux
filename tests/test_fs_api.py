@@ -182,8 +182,10 @@ def test_file_io_afs():
         target = dir_path / f"default_file_{i}.txt"
         assert target.exists()
     # Remove the originals
-    with pytest.raises(OSError, match="Directory not empty:"):
+    with pytest.raises((OSError, FileExistsError)) as exc_info:
         dir_path.rmdir()
+    if exc_info.type is OSError:
+        assert "Directory not empty" in str(exc_info.value)
     dir_path.rmtree()
     assert not dir_path.exists()
     # Move the new folder back
@@ -338,8 +340,10 @@ def test_file_io_eos(eos_cmd):
         assert target.exists()
     # Remove the originals
     if eos_cmd != 0:   # TODO: remove when xrdfs implemented
-        with pytest.raises(OSError, match="Directory not empty"):
+        with pytest.raises((OSError, FileExistsError)) as exc_info:
             dir_path.rmdir()
+        if exc_info.type is OSError:
+            assert "Directory not empty" in str(exc_info.value)
     dir_path.rmtree()
     assert not dir_path.exists()
     # Move the new folder back

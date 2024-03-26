@@ -167,7 +167,6 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
 def mv(*args, follow_symlinks=True, **kwargs):
     cp(*args, recursive=True, follow_symlinks=follow_symlinks, **kwargs)
     # If we got here, then the copy was successful
-    _assert_eos_accessible(f"Copy was succesful, but cannot remove EOS paths.")
     for arg in args[:-1]:
         if arg.is_dir():
             arg.rmtree()
