@@ -127,7 +127,12 @@ class EosPath(FsPath, Path):
             if len(instance_parts) > 2:
                 raise ValueError(f"EOS instance {parts[2]} has more than one dash.")
             else:
-                parts = ['', 'eos', eos_instance, instance_parts[1], *parts[3:]]
+                if len(instance_parts[1]) > 1:
+                    # This happens e.g. on SWAN where home is cast to home-i04 etc.
+                    # We then just completely ignore the i04 part.
+                    parts = ['', 'eos', eos_instance, *parts[3:]]
+                else:
+                    parts = ['', 'eos', eos_instance, instance_parts[1], *parts[3:]]
         else:
             parts = ['', 'eos', eos_instance, *parts[3:]]
         self.eos_path = '/'.join(parts) + '/' + self.name
