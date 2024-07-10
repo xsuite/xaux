@@ -145,7 +145,7 @@ def _eos_is_file(path, *args, **kwargs):
         return False
     if ftype is not None:
         return ftype == stat.S_IFREG
-    Path.is_file(path, *args, **kwargs)
+    return Path.is_file(path, *args, **kwargs)
 
 def _eos_is_dir(path, *args, **kwargs):
     _assert_eos_accessible("Cannot stat EOS paths.")
