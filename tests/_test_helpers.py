@@ -5,12 +5,11 @@
 
 import time
 import json
-from pathlib import Path
 import shutil
 import os
 import signal
 
-from xaux import ProtectFile
+from xaux import ProtectFile, FsPath
 
 
 ProtectFile._debug = True
@@ -29,7 +28,7 @@ def rewrite(pf, with_copy=False):
         with open(cfname, "w") as cf:
             json.dump(data, cf, indent=4, sort_keys=True)
         shutil.copyfile(cfname, pf.name)
-        Path.unlink(Path(cfname))
+        FsPath.unlink(FsPath(cfname))
 
 
 def change_file_protected(fname, with_copy=False, max_lock_time=None, error_queue=None):
@@ -52,7 +51,7 @@ def change_file_standard(fname, with_copy=False):
 
 def init_file(fname):
     # Remove leftover lockfiles
-    for f in Path.cwd().glob(f"{fname}.lock*"):
+    for f in FsPath.cwd().glob(f"{fname}.lock*"):
         f.unlink()
     # Initialise file
     with ProtectFile(fname, "w", backup=False, wait=1) as pf:

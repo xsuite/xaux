@@ -1,7 +1,7 @@
 """
 This package is an attempt to make file reading/writing (possibly concurrent) more reliable.
 
-Last update 23/02/2024 - F.F. Van der Veken
+Last update 23/03/2024 - F.F. Van der Veken
 """
 
 import atexit
@@ -346,7 +346,7 @@ class ProtectFile:
                         raise RuntimeError("Too many lockfiles!")
 
         # Store max lock time information
-        if max_lock_time is not None:
+        if   is not None:
             try:
                 flock = io.open(self.lockfile, 'r+')
                 info = json.load(flock)
