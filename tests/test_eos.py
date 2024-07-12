@@ -8,6 +8,7 @@ import os
 import pytest
 
 from xaux.fs import *
+from xaux.fs.eos_methods import EOS_CELL
 
 from test_fs import _test_instantiation, _afs_test_path, _eos_test_path
 
@@ -47,6 +48,8 @@ def test_touch_and_symlinks_eos_access():
     for path in [path_file, path_link, path_broken_link]:
         if path.lexists():
             path.unlink()
+        assert not path.exists()
+        assert not path.lexists()
     path_file.touch(exist_ok=False)
     path_link.symlink_to(path_file)
     path_broken_link.symlink_to(f"{file}_nonexistent")

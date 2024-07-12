@@ -8,7 +8,8 @@ import os
 import pytest
 
 from xaux.fs import *
-from xaux.fs.eos_methods import _xrdcp_installed, _eos_installed, _eos_mounted
+from xaux.fs.afs import _afs_mounted
+from xaux.fs.eos_methods import _xrdcp_installed, _eoscmd_installed, _eos_mounted
 import xaux.fs  # to set test flags
 
 from test_fs import _afs_test_path, _eos_test_path
@@ -65,7 +66,20 @@ def test_fspath_methods():
 
 
 @pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
-def test_file_io_afs():
+@pytest.mark.parametrize("afs_cmd", [0, 1], ids=["xrdcp", "mount"])
+def test_file_io_afs(afs_cmd):
+    xaux.fs._force_xrdcp = False
+    xaux.fs._skip_afs_software = False
+    xaux.fs._skip_eos_software = False
+    if afs_cmd == 0:
+        if not _xrdcp_installed:
+            pytest.skip("The command `xrdcp` is not installed.")
+        xaux.fs._force_xrdcp = True
+    if afs_cmd == 1:
+        if not _afs_mounted:
+            pytest.skip("The AFS file system is not mounted.")
+        xaux.fs._skip_afs_software = True
+
     # Make a link to AFS
     path_afs_link = FsPath("~/afs_test")
     if path_afs_link.lexists():
@@ -114,7 +128,7 @@ def test_file_io_afs():
         target = FsPath(f"~/afs_test/default_file_{i}.txt")
         if target.exists():
             target.unlink()
-    cp(*local_files, "~/afs_test/")
+    print(cp(*local_files, "~/afs_test/"))
     for i in range(1, 8):
         target = FsPath(f"~/afs_test/default_file_{i}.txt")
         assert target.exists()
@@ -124,7 +138,7 @@ def test_file_io_afs():
         assert file.exists()
 
     # Move several files
-    mv(*local_files, "~/afs_test/")
+    print(mv(*local_files, "~/afs_test/"))
     for i in range(1, 8):
         target = FsPath(f"~/afs_test/default_file_{i}.txt")
         assert target.exists()
@@ -156,7 +170,7 @@ def test_file_io_afs():
     for file in local_files:
         file.touch()
         assert file.exists()
-    mv(*local_files, "~/afs_test/Blibo/")
+    print(mv(*local_files, "~/afs_test/Blibo/"))
     for file in local_files:
         assert not file.exists()
     for i in range(1, 8):
@@ -168,8 +182,11 @@ def test_file_io_afs():
         new_dir_path.rmtree()
     new_dir_path.mkdir()
     assert new_dir_path.exists()
-    with pytest.raises(IsADirectoryError, match="Cannot copy directory"):
-        dir_path.copy_to(new_dir_path, recursive=False)
+    # First, fail to copy the directory because recursive is False
+    stdout = dir_path.copy_to(new_dir_path, recursive=False)
+    assert not FsPath("~/afs_test/BliboContainer/Blibo").exists()
+    assert stdout.startswith("cp: -r not specified; omitting directory")
+    # Now copy the directory
     dir_path.copy_to(new_dir_path)
     # Check the copy was successful
     assert FsPath("~/afs_test/BliboContainer/Blibo").exists()
@@ -201,27 +218,30 @@ def test_file_io_afs():
     dir_path.rmtree()
     new_dir_path.rmtree()
     path_afs_link.unlink()
+    xaux.fs._skip_afs_software = False
+    xaux.fs._force_xrdcp = False
 
 
 @pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
 @pytest.mark.parametrize("eos_cmd", [0, 1, 2], ids=["xrdcp", "eos", "mount"])
 def test_file_io_eos(eos_cmd):
     xaux.fs._force_xrdcp = False
-    xaux.fs._force_eos = False
-    xaux.fs._skip_eos = False
+    xaux.fs._force_eoscmd = False
+    xaux.fs._skip_eos_software = False
+    xaux.fs._skip_afs_software = False
     if eos_cmd == 0:
         if not _xrdcp_installed:
             pytest.skip("The command `xrdcp` is not installed.")
         xaux.fs._force_xrdcp = True
     if eos_cmd == 1:
-        if not _eos_installed:
+        if not _eoscmd_installed:
             pytest.skip("The command `eos` is not installed.")
-        xaux.fs._force_eos = True
+        xaux.fs._force_eoscmd = True
     if eos_cmd == 2:
         if not _eos_mounted:
             pytest.skip("The EOS file system is not mounted.")
-        xaux.fs._skip_eos = True
-    
+        xaux.fs._skip_eos_software = True
+
     # Make a link to EOS
     path_eos_link = FsPath("~/eos_test")
     if path_eos_link.lexists():
@@ -270,7 +290,7 @@ def test_file_io_eos(eos_cmd):
         target = FsPath(f"~/eos_test/default_file_{i}.txt")
         if target.exists():
             target.unlink()
-    cp(*local_files, "~/eos_test/")
+    print(cp(*local_files, "~/eos_test/"))
     for i in range(1, 8):
         target = FsPath(f"~/eos_test/default_file_{i}.txt")
         assert target.exists()
@@ -280,7 +300,7 @@ def test_file_io_eos(eos_cmd):
         assert file.exists()
 
     # Move several files
-    mv(*local_files, "~/eos_test/")
+    print(mv(*local_files, "~/eos_test/"))
     for i in range(1, 8):
         target = FsPath(f"~/eos_test/default_file_{i}.txt")
         assert target.exists()
@@ -312,7 +332,7 @@ def test_file_io_eos(eos_cmd):
     for file in local_files:
         file.touch()
         assert file.exists()
-    mv(*local_files, "~/eos_test/Blibo/")
+    print(mv(*local_files, "~/eos_test/Blibo/"))
     for file in local_files:
         assert not file.exists()
     for i in range(1, 8):
@@ -325,8 +345,11 @@ def test_file_io_eos(eos_cmd):
         assert not new_dir_path.exists()
     new_dir_path.mkdir()
     assert new_dir_path.exists()
-    with pytest.raises(IsADirectoryError, match="Cannot copy directory"):
-        dir_path.copy_to(new_dir_path, recursive=False)
+    # First, fail to copy the directory because recursive is False
+    stdout = dir_path.copy_to(new_dir_path, recursive=False)
+    assert not FsPath("~/afs_test/BliboContainer/Blibo").exists()
+    assert stdout.startswith("cp: -r not specified; omitting directory")
+    # Now copy the directory
     dir_path.copy_to(new_dir_path)
     # Check the copy was successful
     assert FsPath("~/eos_test/BliboContainer/Blibo").exists()
@@ -359,5 +382,8 @@ def test_file_io_eos(eos_cmd):
     dir_path.rmtree()
     new_dir_path.rmtree()
     path_eos_link.unlink()
-    
+    xaux.fs._force_xrdcp = False
+    xaux.fs._force_eoscmd = False
+    xaux.fs._skip_eos_software = False
+
 

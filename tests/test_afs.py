@@ -48,6 +48,8 @@ def test_touch_and_symlinks_afs_access():
     for path in [path_file, path_link, path_broken_link]:
         if path.lexists():
             path.unlink()
+        assert not path.exists()
+        assert not path.lexists()
     path_file.touch(exist_ok=False)
     path_link.symlink_to(path_file)
     path_broken_link.symlink_to(f"{file}_nonexistent")
