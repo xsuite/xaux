@@ -5,7 +5,7 @@
 
 import os
 from shutil import rmtree
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
 
 def _non_strict_resolve(path, _as_posix=False):
@@ -53,6 +53,44 @@ class FsPath:
         return cls(Path.home())
 
 
+    # PurePath methods
+    # ================
+
+    @classmethod
+    def _from_parts(cls, args, in__new__=False):
+        # We need to call _parse_args on the instance, so as to get the
+        # right flavour.
+        self = object.__new__(cls)
+        drv, root, parts = self._parse_args(args)
+        self._drv = drv
+        self._root = root
+        self._parts = parts
+        if in__new__:
+            return self
+        else:
+            return FsPath(self)
+
+    @classmethod
+    def _from_parsed_parts(cls, drv, root, parts, in__new__=False):
+        self = object.__new__(cls)
+        self._drv = drv
+        self._root = root
+        self._parts = parts
+        if in__new__:
+            return self
+        else:
+            return FsPath(self)
+
+    @property
+    def _unnested_parent(self):
+        drv = self._drv
+        root = self._root
+        parts = self._parts
+        if len(parts) == 1 and (drv or root):
+            return self
+        return self._from_parsed_parts(drv, root, parts[:-1], in__new__=True)
+
+
     # Overwrite Path methods
     # ======================
 
@@ -66,13 +104,11 @@ class FsPath:
         else:
             new_path = FsPath(Path.resolve(self))
         # And then we get back the correct EOS path
+        # This extra step is needed because the final path might not be on EOS
         if isinstance(new_path, EosPath):
             return EosPath(new_path.eos_path)
         else:
             return new_path
-
-    def touch(self, *args, **kwargs):
-        return Path.touch(self, *args, **kwargs)
 
     def exists(self, *args, **kwargs):
         if self.is_symlink(*args, **kwargs):
@@ -83,12 +119,6 @@ class FsPath:
         target = FsPath(target)
         return Path.symlink_to(self.resolve(**kwargs), target,
                                  target_is_directory=target.is_dir(**kwargs), **kwargs)
-
-    def __truediv__(self, key):
-        return FsPath(Path.__truediv__(self,key))
-
-    def __rtruediv__(self, key):
-        return FsPath(Path.__rtruediv__(self,key))
 
     def unlink(self, *args, **kwargs):
         if not self.is_symlink(*args, **kwargs) and self.is_dir(*args, **kwargs):
@@ -114,17 +144,17 @@ class FsPath:
     def rmtree(self, *args, **kwargs):
         if not self.is_dir(*args, **kwargs):
             raise NotADirectoryError(f"{self} is not a directory.")
-        rmtree(self.resolve(*args, **kwargs).as_posix(*args, **kwargs), *args, **kwargs)
+        return rmtree(self.resolve(*args, **kwargs).as_posix(*args, **kwargs), *args, **kwargs)
 
     def copy_to(self, dst, recursive=None, *args, **kwargs):
         from .io import cp
         if recursive is None:
             recursive = self.is_dir(*args, **kwargs)
-        cp(self, dst, *args, recursive=recursive, **kwargs)
+        return cp(self, dst, *args, recursive=recursive, **kwargs)
 
     def move_to(self, dst, *args, **kwargs):
         from .io import mv
-        mv(self, dst, *args, **kwargs)
+        return mv(self, dst, *args, **kwargs)
 
     def size(self, *args, **kwargs):
         return self.stat(*args, **kwargs).st_size
@@ -141,7 +171,7 @@ class LocalPath(FsPath, Path):
         if cls is LocalPath:
             cls = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
         try:
-            self = cls._from_parts(args).expanduser()
+            self = cls._from_parts(args, in__new__=True).expanduser()
         except AttributeError:
             self = object.__new__(cls).expanduser()
         return self

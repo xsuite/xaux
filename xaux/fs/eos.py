@@ -22,7 +22,10 @@ def _on_eos(*args):
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'eos' or args[1] == 'eos/'):
             return True
-    parents = list(_non_strict_resolve(Path(*args).expanduser().absolute().parent).parents)
+    absolute = _non_strict_resolve(Path(*args).expanduser().absolute().parent)
+    if absolute == _eos_path:
+        return True
+    parents = list(absolute.parents)
     return len(parents) > 1 and parents[-2] == _eos_path
 
 def _parse_instance(eos_instance):
@@ -31,7 +34,7 @@ def _parse_instance(eos_instance):
     return eos_instance.lower()
 
 def _parse_mgm(_eos_mgm):
-    from xaux.fs import EOS_CELL
+    from xaux.fs.eos_methods import EOS_CELL
     if not isinstance(_eos_mgm, str):
         raise ValueError("The variable `_eos_mgm` should be a string.")
     if not _eos_mgm.startswith('root:'):
@@ -68,7 +71,7 @@ class EosPath(FsPath, Path):
     @classmethod
     def _new(cls, *args, _eos_checked=False):
         try:
-            self = cls._from_parts(args).expanduser()
+            self = cls._from_parts(args, in__new__=True).expanduser()
         except AttributeError:
             self = object.__new__(cls).expanduser()
         if not _eos_checked and not _on_eos(self):
@@ -103,7 +106,7 @@ class EosPath(FsPath, Path):
                 self._set_eos_path(_eos_instance=eos_instance)
                 self.mgm = mgm
             else:
-                from xaux.fs import EOS_CELL
+                from xaux.fs.eos_methods import EOS_CELL
                 self._set_eos_path()
                 self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL.lower()}'
         self.eos_path_full = f'{self.mgm}/{self.eos_path}'
@@ -115,7 +118,7 @@ class EosPath(FsPath, Path):
 
 
     def _set_eos_path(self, _eos_instance=None):
-        parts = _non_strict_resolve(self.parent, _as_posix=True).split('/')
+        parts = _non_strict_resolve(self._unnested_parent, _as_posix=True).split('/')
         if len(parts) == 2:
             parts = _non_strict_resolve(self, _as_posix=True).split('/')
         instance_parts = parts[2].split('-')
@@ -180,11 +183,11 @@ class EosPath(FsPath, Path):
     def rmdir(self, *args, **kwargs):
         return _eos_rmdir(self, *args, **kwargs)
 
-    def glob(self, *args, **kwargs):
-        raise NotImplementedError
+    # def glob(self, *args, **kwargs):
+    #     raise NotImplementedError
 
-    def rglob(self, *args, **kwargs):
-        raise NotImplementedError
+    # def rglob(self, *args, **kwargs):
+    #     raise NotImplementedError
 
 
     # Overwrite FsPath methods

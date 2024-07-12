@@ -10,12 +10,10 @@ from .eos_methods import eos_accessible, is_egroup_member
 from .fs_methods import *
 from .io import cp, mv
 
-
-EOS_CELL = 'cern.ch'
-default_eos_instance = 'public'
-
+_xrdcp_use_ipv4 = True
 
 # For testing
-_skip_eos = False
-_force_eos = False
+_skip_afs_software = False
+_skip_eos_software = False
 _force_xrdcp = False
+_force_eoscmd = False

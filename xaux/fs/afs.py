@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .fs import FsPath, _non_strict_resolve
+from .fs_methods import _xrdcp_installed
 
 
 _afs_path = Path('/afs')
@@ -24,7 +25,8 @@ def _assert_fs_installed(mess=None):
         mess = f" {mess}" if mess is not None else mess
         raise OSError(f"`fs` is not installed on your system.{mess}")
 
-afs_accessible = _afs_path.exists()
+_afs_mounted = _afs_path.exists()
+afs_accessible = _afs_mounted or _xrdcp_installed
 
 def _assert_afs_accessible(mess=None):
     if not afs_accessible:
@@ -53,7 +55,7 @@ class AfsPath(FsPath, Path):
         if cls is AfsPath:
             cls = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
         try:
-            self = cls._from_parts(args).expanduser()
+            self = cls._from_parts(args, in__new__=True).expanduser()
         except AttributeError:
             self = object.__new__(cls).expanduser()
         self.afs_cell = _non_strict_resolve(self, _as_posix=True).split('/')[2].upper()

@@ -5,6 +5,17 @@
 
 import os
 from numpy import prod
+from subprocess import run, PIPE, CalledProcessError
+
+
+_xrdcp_installed = False
+if os.name != 'nt':
+    try:
+        cmd = run(["xrdcp", "--version"], stdout=PIPE, stderr=PIPE)
+        _xrdcp_installed = cmd.returncode == 0
+    except (CalledProcessError, FileNotFoundError):
+        _xrdcp_installed = False
+
 
 # The class os.stat_result can only be initialised with a Tuple,
 # however, the contents of this Tuple can change between python versions.
