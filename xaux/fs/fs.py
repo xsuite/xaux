@@ -57,7 +57,7 @@ class FsPath:
     # ================
 
     @classmethod
-    def _from_parts(cls, args, in__new__=False):
+    def _from_parts(cls, args, in__new__=False, init=True):
         # We need to call _parse_args on the instance, so as to get the
         # right flavour.
         self = object.__new__(cls)
@@ -65,17 +65,21 @@ class FsPath:
         self._drv = drv
         self._root = root
         self._parts = parts
+        if init and hasattr(self, '_init'):
+            self._init()
         if in__new__:
             return self
         else:
             return FsPath(self)
 
     @classmethod
-    def _from_parsed_parts(cls, drv, root, parts, in__new__=False):
+    def _from_parsed_parts(cls, drv, root, parts, in__new__=False, init=True):
         self = object.__new__(cls)
         self._drv = drv
         self._root = root
         self._parts = parts
+        if init and hasattr(self, '_init'):
+            self._init()
         if in__new__:
             return self
         else:

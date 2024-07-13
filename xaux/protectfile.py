@@ -346,7 +346,7 @@ class ProtectFile:
                         raise RuntimeError("Too many lockfiles!")
 
         # Store max lock time information
-        if   is not None:
+        if max_lock_time is not None:
             try:
                 flock = io.open(self.lockfile, 'r+')
                 info = json.load(flock)
