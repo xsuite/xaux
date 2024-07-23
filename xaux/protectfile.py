@@ -216,11 +216,6 @@ class ProtectFile:
         # Time to wait between trials to generate lockfile
         wait = arg.pop('wait', 1)
 
-        # Create a unique process identifier
-        self._pid = os.getpid()
-        self._ran = random.randint(0, 2**64 - 1)
-        self._machine = os.uname().nodename
-
         # Try to make lockfile, wait if unsuccesful
         self._access = False
         while True:
@@ -235,7 +230,6 @@ class ProtectFile:
                     self._wait(wait)
                     continue
                 self._print_debug("init", f"created {self.lockfile}")
-                self._access = True
                 break
 
             except FileExistsError:
@@ -297,6 +291,10 @@ class ProtectFile:
                 else:
                     raise PermissionError(f"Cannot access {self.lockfile}; permission denied.")
 
+        # Success!
+        self._access = True
+        self._delete_lock_at_finish = True
+
         # Store stats (to check if file got corrupted later)
         if self._check_hash and self._exists:
             self._size = self.file.size()
@@ -331,8 +329,9 @@ class ProtectFile:
         free_after = -1
         if max_lock_time is not None:
             free_after = time.time() + max_lock_time
+        self._ran = random.randint(0, 2**63 - 1) + os.getpid() + int(time.time_ns() % 1e9)
+        self._machine = os.uname().nodename
         json.dump({
-            'pid':     self._pid,
             'ran':     self._ran,
             'machine': self._machine,
             'free_after': free_after
@@ -366,10 +365,6 @@ class ProtectFile:
             # If we cannot load the json, it might be empty or being written to
             self._print_debug("lock_is_ours", f"cannot load json info from {lockfile}")
             return False
-        if 'pid' not in info or info['pid'] != self._pid:
-            pid = info['pid'] if 'pid' in info else 'None'
-            self._print_debug("lock_is_ours", f"pid info changed in {lockfile} ({pid} vs {self._pid})")
-            return False
         if 'ran' not in info or info['ran'] != self._ran:
             ran = info['ran'] if 'ran' in info else 'None'
             self._print_debug("lock_is_ours", f"ran info changed in {lockfile} ({ran} vs {self._ran})")
@@ -398,6 +393,7 @@ class ProtectFile:
         self.lockfile.flush()
         time.sleep(random.uniform(0.1, 0.2))
         if not self._lock_is_ours(self.lockfile):
+            self._delete_lock_at_finish = False
             self.stop_with_error(f"Lockfile {self.lockfile} is not ours anymore.")
             return
         # Check that we did not run out of time
@@ -405,7 +401,7 @@ class ProtectFile:
             with self.lockfile.open('r') as fid:
                 info = json.load(fid)
         except:
-            self._print_debug("init", f"cannot load json info from {self.lockfile}!")
+            self._delete_lock_at_finish = False
             self.stop_with_error("Loading JSON from lockfile failed.")
             return
         if 'free_after' in info and info['free_after'] > 0 and info['free_after'] < time.time():
@@ -457,9 +453,8 @@ class ProtectFile:
                 self.tempfile.copy_to(self.file)
                 # # Check if copy succeeded
                 # if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
-                #     print(f"Warning: tried to copy temporary file {self.tempfile} into {self.file}, "
+                #     self.stop_with_error(f"Warning: tried to copy temporary file {self.tempfile} into {self.file}, "
                 #           + "but hashes do not match!")
-                #     self.stop_with_error()
             else:
                 self._print_debug("mv_temp", f"cp {self.tempfile=} to {destination=}")
                 self.tempfile.copy_to(destination)
@@ -468,9 +463,10 @@ class ProtectFile:
 
 
     def stop_with_error(self, message):
-        """Save calculation results in case of failure"""
+        """Fail the job, and potentially save calculation results"""
         if not self._access:
             return
+        self._access = False
         results_saved = False
         alt_file = None
         if self._use_temporary:
@@ -483,8 +479,6 @@ class ProtectFile:
 
     def release(self, pop=True):
         """Clean up lockfile and tempfile"""
-        if not self._access:
-            return
         # Overly verbose in checking, as to make sure this never fails
         # (to avoid being stuck with remnant lockfiles)
         # Close main file pointer
@@ -498,9 +492,10 @@ class ProtectFile:
             self._print_debug("release", f"unlink {self.tempfile}")
             self.tempfile.unlink()
         # Delete lockfile
-        if hasattr(self,'_lock') and hasattr(self._lock,'is_file') and self._lock.is_file():
-            self._print_debug("release", f"unlink {self.lockfile}")
-            self.lockfile.unlink()
+        if hasattr(self, '_delete_lock_at_finish') and self._delete_lock_at_finish:
+            if hasattr(self,'_lock') and hasattr(self._lock,'is_file') and self._lock.is_file():
+                self._print_debug("release", f"unlink {self.lockfile}")
+                self.lockfile.unlink()
         # Remove file from the protected register
         if pop:
             protected_open.pop(self._file, 0)
