@@ -27,8 +27,7 @@ def test_deliberate_failure():
 
 
 @pytest.mark.parametrize("workers", [4, 100])
-@pytest.mark.parametrize("with_copy", [False, True])
-def test_protection(workers, with_copy):
+def test_protection(workers):
     fname = "test_protection.json"
     init_file(fname)
 

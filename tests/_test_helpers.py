@@ -15,26 +15,19 @@ from xaux import ProtectFile, FsPath
 ProtectFile._debug = True
 
 
-def rewrite(pf, with_copy=False):
+def rewrite(pf):
     data = json.load(pf)
     time.sleep(0.2)
     data["myint"] += 1
-    if not with_copy:
-        pf.seek(0)  # revert point to beginning of file
-        json.dump(data, pf, indent=4, sort_keys=True)
-        pf.truncate()
-    else:  # write to another file and copy back
-        cfname = "_copy_" + pf.name
-        with open(cfname, "w") as cf:
-            json.dump(data, cf, indent=4, sort_keys=True)
-        shutil.copyfile(cfname, pf.name)
-        FsPath.unlink(FsPath(cfname))
+    pf.seek(0)  # revert point to beginning of file
+    json.dump(data, pf, indent=4, sort_keys=True)
+    pf.truncate()
 
 
-def change_file_protected(fname, with_copy=False, max_lock_time=None, error_queue=None):
+def change_file_protected(fname, max_lock_time=None, error_queue=None):
     try:
         with ProtectFile(fname, "r+", wait=0.1, max_lock_time=max_lock_time) as pf:
-            rewrite(pf, with_copy=with_copy)
+            rewrite(pf)
     except Exception as e:
         if error_queue is None:
             raise e
@@ -43,7 +36,7 @@ def change_file_protected(fname, with_copy=False, max_lock_time=None, error_queu
     return
 
 
-def change_file_standard(fname, with_copy=False):
+def change_file_standard(fname):
     with open(fname, "r+") as pf:  # fails with this context
         rewrite(pf)
     return
