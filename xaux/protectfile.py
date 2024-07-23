@@ -15,6 +15,7 @@ import json
 
 from .fs import FsPath, EosPath
 from .fs.temp import _tempdir
+from .tools import ranID
 
 
 LOCKFILE_NESTING_MAX_LEVEL = 5   # Max number of lockfiles to exist simultaneously
@@ -213,7 +214,7 @@ class ProtectFile:
         file = arg['file']
         self._file = file
         self._lock = FsPath(file.parent, file.name + '.lock').resolve()
-        self._temp = FsPath(_tempdir.name, file.name).resolve()
+        self._temp = FsPath(_tempdir.name, file.name + ranID()).resolve()
 
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the backup and temporary files
@@ -275,7 +276,7 @@ class ProtectFile:
                 # namely another process could have started creating the file while we
                 # did not see it having been created yet...
                 # TODO: this is not foolproof, but it is a good start.. What if file corruption?
-                if not self._lock_is_available(flock):
+                if not self._lock_is_available(flock, max_lock_time):
                     self._wait(wait)
                     continue
                 self._print_debug("init", f"created {self.lockfile}")
@@ -298,7 +299,7 @@ class ProtectFile:
                             local_lockfile.unlink()
                         flock = io.open(local_lockfile, 'x')
                         self._print_debug("init", f"created local {local_lockfile}")
-                        if not self._lock_is_available(flock, local_lockfile):
+                        if not self._lock_is_available(flock, max_lock_time, local_lockfile):
                             self._wait(wait)
                             continue
                         self._print_debug("init", f"created {self.lockfile} via eos cp")
@@ -345,32 +346,6 @@ class ProtectFile:
                     else:
                         raise RuntimeError("Too many lockfiles!")
 
-        # Store max lock time information
-        if max_lock_time is not None:
-            try:
-                flock = io.open(self.lockfile, 'r+')
-                info = json.load(flock)
-                info['free_after'] = time.time() + max_lock_time
-                json.dump(info, flock)
-                flock.close() # to make sure write is executed
-            except PermissionError:
-                # Special case: we can still access eos files when permission has expired, using `eos`
-                if isinstance(self.file, EosPath):
-                    try:
-                        local_lockfile = FsPath(_tempdir.name, file.name + '.lock').resolve()
-                        self.lockfile.copy_to(local_lockfile)
-                        flock = io.open(local_lockfile, 'r+')
-                        info = json.load(flock)
-                        info['free_after'] = time.time() + max_lock_time
-                        json.dump(info, flock)
-                        flock.close() # to make sure write is executed
-                        local_lockfile.move_to(self.lockfile)
-                    except:
-                        # This means the `eos` command has failed as well: we really don't have access
-                        raise PermissionError(f"Cannot access {self.lockfile}; permission denied.")
-                else:
-                    raise PermissionError(f"Cannot access {self.lockfile}; permission denied.")
-
         # Make a backup if requested
         if self._readonly and not self._backup_if_readonly:
             self._do_backup = False
@@ -401,18 +376,22 @@ class ProtectFile:
 
     def _wait(self, wait):
         # Add some white noise to the wait time to avoid different processes syncing
-        this_wait = abs(random.normalvariate(wait, 1e-1*wait))
+        this_wait = random.uniform(wait*0.6, wait*1.4)
         self._print_debug("init", f"waiting {this_wait}s to create {self.lockfile}")
         time.sleep(this_wait)
 
-    def _lock_is_available(self, flock, local_file=None):
+    def _lock_is_available(self, flock, max_lock_time=None, local_file=None, wait=1):
         # flock is either a file pointer to the lockfile (normal use)
         # or a local file that will then replace it after checking
         # Write sysinfo to flock
+        free_after = -1
+        if max_lock_time is not None:
+            free_after = time.time() + max_lock_time
         json.dump({
             'pid':     self._pid,
             'ran':     self._ran,
-            'machine': self._machine
+            'machine': self._machine,
+            'free_after': free_after
         }, flock)
         flock.close()
         if local_file is not None:
@@ -420,7 +399,7 @@ class ProtectFile:
             local_file.move_to(self.lockfile)  # can use `eos` command
             assert not local_file.is_file()    # sanity check
         # To confirm we are first, the lockfile info should not change after a wait
-        time.sleep(abs(random.normalvariate(1, 2e-1)))
+        time.sleep(random.uniform(wait*0.6, wait*1.4))
         # Check the lockfile again
         if local_file is None:
             lockfile = self.lockfile
@@ -428,19 +407,22 @@ class ProtectFile:
             # If we are using a local file, we have to copy lockfile back here
             self.lockfile.copy_to(local_file)  # can use `eos` command
             lockfile = local_file
-        flock = io.open(lockfile, 'r+')
+        is_ours = self._lock_is_ours(lockfile)
+        if local_file is not None:
+            local_file.unlink()
+        return is_ours
+
+
+    def _lock_is_ours(self, lockfile):
+        flock = io.open(lockfile, 'r')
         try:
             info = json.load(flock)
         except:
             # If we cannot load the json, it might be empty or being written to
             flock.close()
-            if local_file is not None:
-                local_file.unlink()
             self._print_debug("init", f"cannot load json info from {lockfile}")
             return False
         flock.close()
-        if local_file is not None:
-            local_file.unlink()
         if 'pid' not in info or info['pid'] != self._pid:
             pid = info['pid'] if 'pid' in info else 'None'
             self._print_debug("init", f"pid info changed in {lockfile} ({pid} vs {self._pid})")
@@ -454,6 +436,10 @@ class ProtectFile:
             self._print_debug("init", f"machine info changed in {lockfile} ({machine} vs {self._machine})")
             return False
         # We got here, so the lockfile is ours
+        if 'free_after' in info and info['free_after'] > 0 and info['free_after'] < time.time():
+            # Max runtime was expired. No issue (passed all checks) but output warning as info
+            print(f"Warning: Job {self._file} took longer than expected ("
+                + f"{round(time.time() - info['free_after'])}s.")
         return True
 
 
@@ -469,6 +455,12 @@ class ProtectFile:
         # Close file pointer
         if not self._fd.closed:
             self._fd.close()
+        # Check that the lock is still ours
+        if not self._lock_is_ours(self.lockfile):
+            print(f"Error: lockfile {self.lockfile} is not ours anymore.")
+            self.restore()
+            self.release()
+            return
         # Check that original file was not modified in between (i.e. corrupted)
         file_changed = False
         if self._nesting_level == 0 and self._check_hash and self._exists:
