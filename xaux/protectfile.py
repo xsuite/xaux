@@ -18,11 +18,6 @@ from .fs.temp import _tempdir
 from .tools import ranID
 
 
-LOCKFILE_NESTING_MAX_LEVEL = 5   # Max number of lockfiles to exist simultaneously
-LOCKFILE_NESTING_MAX_LOCK_TIME = 10
-LOCKFILE_NESTING_WAIT = 0.1
-
-
 protected_open = {}
 
 def exit_handler():
@@ -141,7 +136,7 @@ class ProtectFile:
 
     # Use debug flag below to inspect steps in file IO
     _debug = False
-    _testing_nested = False
+    _testing = False
 
 
     def __init__(self, *args, **kwargs):
@@ -209,30 +204,17 @@ class ProtectFile:
         if self._readonly:
             self._use_temporary = False
 
-        # This is the level of nested lockfiles.
-        self._nesting_level = arg.pop('_nesting_level', 0)
-
         # Provide an expected running time (to free a file in case of crash)
         max_lock_time = arg.pop('max_lock_time', None)
-        if max_lock_time is not None and self._readonly == False \
-        and self._nesting_level == 0:
+        if max_lock_time is not None and self._readonly == False:
             print("Warning: Using `max_lock_time` for non read-only "
                 + "files is dangerous! If the time is estimated wrongly "
                 + "and a file is freed while the original process is "
-                + "still running, file corruption WILL occur. Are you "
+                + "still running, file corruption might occur. Are you "
                 + "sure this is what you want?")
 
         # Time to wait between trials to generate lockfile
         wait = arg.pop('wait', 1)
-
-        # Override defaults in case of nested lockfiles
-        if self._nesting_level > 0:
-            self._use_temporary = False
-            if self._testing_nested:
-                max_lock_time = 0.3  # only for tests
-            else:
-                max_lock_time = LOCKFILE_NESTING_MAX_LOCK_TIME
-            wait = LOCKFILE_NESTING_WAIT
 
         # Create a unique process identifier
         self._pid = os.getpid()
@@ -243,18 +225,49 @@ class ProtectFile:
         self._access = False
         while True:
             try:
+                self.lockfile.getfid() # Look up the file on the server
                 flock = io.open(self.lockfile, 'x')
                 # Success! Or is it....?
                 # We are in the lockfile, but there is still one potential concurrency,
                 # namely another process could have started creating the file while we
                 # did not see it having been created yet...
-                # TODO: this is not foolproof, but it is a good start.. What if file corruption?
                 if not self._lock_is_available(flock, max_lock_time):
                     self._wait(wait)
                     continue
                 self._print_debug("init", f"created {self.lockfile}")
                 self._access = True
                 break
+
+            except FileExistsError:
+                # Lockfile exists, wait and try again
+                self._wait(wait)
+                if max_lock_time is not None:
+                    try:
+                        kill_lock = False
+                        with self.lockfile.open('r') as fid:
+                            try:
+                                info = json.load(fid)
+                            except:
+                                continue
+                        if self._testing:
+                            # This is only for tests, to be able to kill the process
+                            time.sleep(1)
+                        if 'free_after' in info and info['free_after'] > 0 \
+                        and info['free_after'] < time.time():
+                            # We free the original process by deleting the lockfile
+                            # and then we go to the next step in the while loop.
+                            # Note that this does not necessarily imply this process
+                            # gets to use the file; which is the intended behaviour
+                            # (first one wins).
+                            kill_lock = True
+                        if kill_lock:
+                            self.lockfile.unlink()
+                            self._print_debug("init",f"freed {self.lockfile} because "
+                                                + "of exceeding max_lock_time")
+                    except FileNotFoundError:
+                        # All is fine, the lockfile disappeared in the meanwhile.
+                        # Return to the while loop.
+                        pass
 
             except PermissionError:
                 # Special case: we can still access eos files when permission has expired, using `eos`
@@ -284,45 +297,13 @@ class ProtectFile:
                 else:
                     raise PermissionError(f"Cannot access {self.lockfile}; permission denied.")
 
-            except FileExistsError:
-                # Lockfile exists, wait and try again
-                self._wait(wait)
-                if max_lock_time is not None:
-                    # Check if the original process that locked the file
-                    # might have crashed. If yes, this process can take over.
-                    # We are only allowed to do this for 5 locking iterations.
-                    if self._nesting_level < LOCKFILE_NESTING_MAX_LEVEL:
-                        # Try to open the lock
-                        try:
-                            with ProtectFile(self.lockfile, 'r+',
-                                             _nesting_level=self._nesting_level+1) as pf:
-                                try:
-                                    info = json.load(pf)
-                                except:
-                                    continue
-                                if self._testing_nested:
-                                    # This is only for tests, to be able to kill the process
-                                    time.sleep(1)
-                                if 'free_after' in info and info['free_after'] < time.time():
-                                    # We free the original process by deleting the lockfile
-                                    # and then we go to the next step in the while loop.
-                                    # Note that this does not necessarily imply this process
-                                    # gets to use the file; which is the intended behaviour
-                                    # (first one wins).
-                                    self.lockfile.unlink()
-                                    self._print_debug("init",f"freed {self.lockfile} because "
-                                                      + "of exceeding max_lock_time")
-                        except FileNotFoundError:
-                            # All is fine, the lockfile disappeared in the meanwhile.
-                            # Return to the while loop.
-                            pass
-                    else:
-                        raise RuntimeError("Too many lockfiles!")
-
         # Store stats (to check if file got corrupted later)
-        if self._nesting_level == 0 and self._check_hash and self._exists:
+        if self._check_hash and self._exists:
             self._size = self.file.size()
             self._hash = get_hash(self.file)
+
+        # Force an update from the file system
+        self._file.flush()
 
         # Choose file pointer:
         # To the temporary file if writing, or existing file if read-only
@@ -343,7 +324,7 @@ class ProtectFile:
         self._print_debug("init", f"waiting {this_wait}s to create {self.lockfile}")
         time.sleep(this_wait)
 
-    def _lock_is_available(self, flock, max_lock_time=None, local_file=None, wait=1):
+    def _lock_is_available(self, flock, max_lock_time=None, local_file=None):
         # flock is either a file pointer to the lockfile (normal use)
         # or a local file that will then replace it after checking
         # Write sysinfo to flock
@@ -361,8 +342,9 @@ class ProtectFile:
             # If we are using a local file, we have to replace the lockfile
             local_file.move_to(self.lockfile)  # can use `eos` command
             assert not local_file.is_file()    # sanity check
-        # To confirm we are first, the lockfile info should not change after a wait
-        time.sleep(random.uniform(wait*0.6, wait*1.4))
+        # Flush the file from the server
+        self.lockfile.flush()
+        time.sleep(random.uniform(0.1, 0.2))
         # Check the lockfile again
         if local_file is None:
             lockfile = self.lockfile
@@ -377,33 +359,26 @@ class ProtectFile:
 
 
     def _lock_is_ours(self, lockfile):
-        flock = io.open(lockfile, 'r')
         try:
-            info = json.load(flock)
+            with lockfile.open('r') as fid:
+                info = json.load(fid)
         except:
             # If we cannot load the json, it might be empty or being written to
-            flock.close()
-            self._print_debug("init", f"cannot load json info from {lockfile}")
+            self._print_debug("lock_is_ours", f"cannot load json info from {lockfile}")
             return False
-        flock.close()
         if 'pid' not in info or info['pid'] != self._pid:
             pid = info['pid'] if 'pid' in info else 'None'
-            self._print_debug("init", f"pid info changed in {lockfile} ({pid} vs {self._pid})")
+            self._print_debug("lock_is_ours", f"pid info changed in {lockfile} ({pid} vs {self._pid})")
             return False
         if 'ran' not in info or info['ran'] != self._ran:
             ran = info['ran'] if 'ran' in info else 'None'
-            self._print_debug("init", f"ran info changed in {lockfile} ({ran} vs {self._ran})")
+            self._print_debug("lock_is_ours", f"ran info changed in {lockfile} ({ran} vs {self._ran})")
             return False
         if 'machine' not in info or info['machine'] != self._machine:
             machine = info['machine'] if 'machine' in info else 'None'
-            self._print_debug("init", f"machine info changed in {lockfile} ({machine} vs {self._machine})")
+            self._print_debug("lock_is_ours", f"machine info changed in {lockfile} ({machine} vs {self._machine})")
             return False
         # We got here, so the lockfile is ours
-        if 'free_after' in info and info['free_after'] > 0 and info['free_after'] < time.time():
-            # Max runtime was expired. No issue (passed all checks) but output warning as info
-            print(f"Warning: Job {self._file} took longer than expected ("
-                + f"{round(time.time() - info['free_after'])}s. No corruption took place, "
-                + f"but it might be advised to increase max_lock_time.")
         return True
 
 
@@ -420,14 +395,27 @@ class ProtectFile:
         if not self._fd.closed:
             self._fd.close()
         # Check that the lock is still ours
+        self.lockfile.flush()
+        time.sleep(random.uniform(0.1, 0.2))
         if not self._lock_is_ours(self.lockfile):
-            print(f"Error: lockfile {self.lockfile} is not ours anymore.")
-            self.save_state()
-            self.release()
+            self.stop_with_error(f"Lockfile {self.lockfile} is not ours anymore.")
+            return
+        # Check that we did not run out of time
+        try:
+            with self.lockfile.open('r') as fid:
+                info = json.load(fid)
+        except:
+            self._print_debug("init", f"cannot load json info from {self.lockfile}!")
+            self.stop_with_error("Loading JSON from lockfile failed.")
+            return
+        if 'free_after' in info and info['free_after'] > 0 and info['free_after'] < time.time():
+            # Max runtime was expired. We have to forfeit the job as this is a potential failure point.
+            self.stop_with_error(f"Error: Job {self._file} took longer than expected ("
+                + f"{round(time.time() - info['free_after'])}s. Increase max_lock_time.")
             return
         # Check that original file was not modified in between (i.e. corrupted)
         file_changed = False
-        if self._nesting_level == 0 and self._check_hash and self._exists:
+        if self._use_temporary and self._check_hash and self._exists:
             new_size = self.file.size()
             new_hash = get_hash(self.file)
             if self._hash != new_hash:
@@ -436,15 +424,13 @@ class ProtectFile:
             #     if key not in new_stats or val != new_stats[key]:
             #         file_changed = True
         if file_changed:
-            print(f"Error: File {self.file} changed during lock! "
+            self.stop_with_error(f"Error: File {self.file} changed during lock! "
                 + f"Original size: {self._size}, new size: {new_size}. "
                 + f"Original hash: {self._hash}, new hash: {new_hash}.")
-            # and move result of calculation (i.e. tempfile) to the parent folder
-            self.save_state()
         else:
             # All is fine: move result from temporary file to original
             self.mv_temp()
-        self.release()
+            self.release()
 
 
     @property
@@ -473,7 +459,7 @@ class ProtectFile:
                 # if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
                 #     print(f"Warning: tried to copy temporary file {self.tempfile} into {self.file}, "
                 #           + "but hashes do not match!")
-                #     self.save_state()
+                #     self.stop_with_error()
             else:
                 self._print_debug("mv_temp", f"cp {self.tempfile=} to {destination=}")
                 self.tempfile.copy_to(destination)
@@ -481,15 +467,18 @@ class ProtectFile:
             self.tempfile.unlink()
 
 
-    def save_state(self):
+    def stop_with_error(self, message):
         """Save calculation results in case of failure"""
         if not self._access:
             return
+        results_saved = False
+        alt_file = None
         if self._use_temporary:
             extension = f"__{datetime.datetime.now().isoformat()}.result"
             alt_file = FsPath(self.file.parent, self.file.name + extension).resolve()
             self.mv_temp(alt_file)
-            print(f"Saved calculation results in {alt_file.name}.")
+            results_saved = True
+        raise ProtectFileError(message, results_saved, alt_file)
 
 
     def release(self, pop=True):
@@ -498,10 +487,12 @@ class ProtectFile:
             return
         # Overly verbose in checking, as to make sure this never fails
         # (to avoid being stuck with remnant lockfiles)
-
         # Close main file pointer
         if hasattr(self,'_fd') and hasattr(self._fd,'closed') and not self._fd.closed:
             self._fd.close()
+        # Flag the changes to the server
+        self.file.getfid()
+        time.sleep(random.uniform(0.1, 0.2))
         # Delete temporary file
         if hasattr(self,'_temp') and hasattr(self._temp,'is_file') and self._temp.is_file():
             self._print_debug("release", f"unlink {self.tempfile}")
@@ -518,3 +509,15 @@ class ProtectFile:
         if self._debug:
             print(f"({self._file.name}) {prc}: {msg}\n")
 
+class ProtectFileError(Exception):
+    def __init__(self, message, results_saved, alt_file):
+        mess = f"ProtectFile failed! {message}"
+        if results_saved:
+            mess += f" Saved calculation results in {alt_file.name}."
+        super().__init__(mess)
+        self.message = message
+        self.results_saved = results_saved
+        self.alt_file = alt_file
+
+    def __reduce__(self):
+        return (ProtectFileError, (self.message, self.results_saved, self.alt_file))
