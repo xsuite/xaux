@@ -3,9 +3,10 @@
 # Copyright (c) CERN, 2024.                 #
 # ######################################### #
 
-import os
+import os, sys
 from shutil import rmtree
-from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
+from contextlib import contextmanager
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 def _non_strict_resolve(path, _as_posix=False):
@@ -56,43 +57,70 @@ class FsPath:
     # PurePath methods
     # ================
 
-    @classmethod
-    def _from_parts(cls, args, in__new__=False, init=True):
-        # We need to call _parse_args on the instance, so as to get the
-        # right flavour.
-        self = object.__new__(cls)
-        drv, root, parts = self._parse_args(args)
-        self._drv = drv
-        self._root = root
-        self._parts = parts
-        if init and hasattr(self, '_init'):
-            self._init()
-        if in__new__:
-            return self
-        else:
-            return FsPath(self)
+    if sys.version_info >= (3, 12):
+        def with_segments(self, *pathsegments, _cast_as_fspath=True, _force_path=False):
+            if _cast_as_fspath:
+                return FsPath(*pathsegments)
+            elif _force_path:
+                return Path(*pathsegments)
+            else:
+                return type(self)(*pathsegments)
 
-    @classmethod
-    def _from_parsed_parts(cls, drv, root, parts, in__new__=False, init=True):
-        self = object.__new__(cls)
-        self._drv = drv
-        self._root = root
-        self._parts = parts
-        if init and hasattr(self, '_init'):
-            self._init()
-        if in__new__:
-            return self
-        else:
-            return FsPath(self)
+        # We create a contextmanager to avoid casting to FsPath in the constructor
+        @classmethod
+        @contextmanager
+        def _in_constructor(cls, _force=False):
+            original_with_segments = cls.with_segments
+            def new_with_segments(self, *args, **kwargs):
+                return original_with_segments(self, *args, _cast_as_fspath=False,
+                                              _force_path=_force, **kwargs)
+            cls.with_segments = new_with_segments
+            try:
+                yield
+            finally:
+                cls.with_segments = original_with_segments
+                # cls.parent = original_parent
 
-    @property
-    def _unnested_parent(self):
-        drv = self._drv
-        root = self._root
-        parts = self._parts
-        if len(parts) == 1 and (drv or root):
-            return self
-        return self._from_parsed_parts(drv, root, parts[:-1], in__new__=True)
+    else:
+        @classmethod
+        def _from_parts(cls, args, _cast_as_fspath=True, _force_path=False, **kwargs):
+            if _cast_as_fspath:
+                return FsPath(super(Path, cls)._from_parts(args, **kwargs))
+            elif _force_path:
+                return Path(super(Path, cls)._from_parts(args, **kwargs))
+            else:
+                return super(Path, cls)._from_parts(args, **kwargs)
+
+        @classmethod
+        def _from_parsed_parts(cls, *args, _cast_as_fspath=True, _force_path=False, **kwargs):
+            if _cast_as_fspath:
+                return FsPath(super(Path, cls)._from_parsed_parts(*args, **kwargs))
+            elif _force_path:
+                return Path(super(Path, cls)._from_parsed_parts(*args, **kwargs))
+            else:
+                return super(Path, cls)._from_parsed_parts(*args, **kwargs)
+
+        # We create a contextmanager to avoid casting to FsPath in the constructor
+        @classmethod
+        @contextmanager
+        def _in_constructor(cls, _force=False):
+            original_from_parts = cls._from_parts
+            @classmethod
+            def new_from_parts(cls, args, **kwargs):
+                return original_from_parts(args, _cast_as_fspath=False,
+                                           _force_path=_force, **kwargs)
+            cls._from_parts = new_from_parts
+            original_from_parsed_parts = cls._from_parsed_parts
+            @classmethod
+            def new_from_parsed_parts(cls, *args, **kwargs):
+                return original_from_parsed_parts(*args, _cast_as_fspath=False,
+                                                  _force_path=_force, **kwargs)
+            cls._from_parsed_parts = new_from_parsed_parts
+            try:
+                yield
+            finally:
+                cls._from_parts = original_from_parts
+                cls._from_parsed_parts = original_from_parsed_parts
 
 
     # Overwrite Path methods
@@ -106,7 +134,7 @@ class FsPath:
         if isinstance(self, EosPath):
             new_path = FsPath(_non_strict_resolve(Path(self.eos_path), _as_posix=True))
         else:
-            new_path = FsPath(Path.resolve(self))
+            new_path = FsPath(Path.resolve(Path(self).expanduser()))
         # And then we get back the correct EOS path
         # This extra step is needed because the final path might not be on EOS
         if isinstance(new_path, EosPath):
@@ -114,27 +142,35 @@ class FsPath:
         else:
             return new_path
 
+    def is_file(self, *args, **kwargs):
+        return Path.is_file(self.expanduser(), *args, **kwargs)
+
+    def is_dir(self, *args, **kwargs):
+        return Path.is_dir(self.expanduser(), *args, **kwargs)
+
+    def is_symlink(self, *args, **kwargs):
+        return Path.is_symlink(self.expanduser(), *args, **kwargs)
+
     def exists(self, *args, **kwargs):
         if self.is_symlink(*args, **kwargs):
             return self.resolve(*args, **kwargs).exists(*args, **kwargs)
-        return Path.exists(self, *args, **kwargs)
+        return Path.exists(self.expanduser(), *args, **kwargs)
 
     def symlink_to(self, target, target_is_directory=False, **kwargs):
         target = FsPath(target)
-        return Path.symlink_to(self.resolve(**kwargs), target,
-                                 target_is_directory=target.is_dir(**kwargs), **kwargs)
+        return Path.symlink_to(self.expanduser().resolve(**kwargs), target.expanduser(),
+                               target_is_directory=target.is_dir(**kwargs), **kwargs)
 
     def unlink(self, *args, **kwargs):
         if not self.is_symlink(*args, **kwargs) and self.is_dir(*args, **kwargs):
             raise IsADirectoryError(f"{self} is a directory.")
-        Path.unlink(self, *args, **kwargs)
+        Path.unlink(self.expanduser(), *args, **kwargs)
 
     def rmdir(self, *args, **kwargs):
         if not self.is_dir(*args, **kwargs):
             raise NotADirectoryError(f"{self} is not a directory.")
-        Path.rmdir(self, *args, **kwargs)
+        Path.rmdir(self.expanduser(), *args, **kwargs)
 
-    # TODO mv and rename replace etc
 
     # New methods
     # ===========
@@ -148,7 +184,7 @@ class FsPath:
     def rmtree(self, *args, **kwargs):
         if not self.is_dir(*args, **kwargs):
             raise NotADirectoryError(f"{self} is not a directory.")
-        return rmtree(self.resolve(*args, **kwargs).as_posix(*args, **kwargs), *args, **kwargs)
+        return rmtree(self.expanduser().resolve(*args, **kwargs).as_posix(*args, **kwargs), *args, **kwargs)
 
     def copy_to(self, dst, recursive=None, *args, **kwargs):
         from .io import cp
@@ -161,7 +197,7 @@ class FsPath:
         return mv(self, dst, *args, **kwargs)
 
     def size(self, *args, **kwargs):
-        return self.stat(*args, **kwargs).st_size
+        return self.expanduser().stat(*args, **kwargs).st_size
 
 
 # To give regular Path objects the same functionality as FsPath objects
@@ -174,11 +210,16 @@ class LocalPath(FsPath, Path):
     def __new__(cls, *args):
         if cls is LocalPath:
             cls = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
-        try:
-            self = cls._from_parts(args, in__new__=True).expanduser()
-        except AttributeError:
-            self = object.__new__(cls).expanduser()
+        with cls._in_constructor():
+            try:
+                self = cls._from_parts(args)
+            except AttributeError:
+                self = object.__new__(cls)
         return self
+
+    def __init__(self, *args):
+        with self.__class__._in_constructor():
+            super().__init__()
 
 
 class LocalPosixPath(LocalPath, PurePosixPath):

@@ -28,7 +28,7 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
         return
     this_stdout = ""
     this_stderr = ""
-    args = [FsPath(arg) for arg in args]
+    args = [FsPath(arg).expanduser() for arg in args]
     target = args[-1].resolve()
     sources = args[:-1]
 
@@ -375,7 +375,6 @@ def _cp_eoscmd(sources_targets):
         target = this_cmd_data[-2]
         this_cmd = this_cmd_data[:-3]
         cmd_mess = ' '.join(this_cmd)
-        print(cmd_mess)
         if isinstance(target, EosPath):
             mgm = target.mgm
         else:

@@ -6,6 +6,7 @@
 from pathlib import Path
 import os
 import pytest
+import numpy as np
 
 from xaux.fs import *
 from xaux.fs.afs import _fs_installed
@@ -137,3 +138,56 @@ def test_instantiation_local():
     for f in [file, rel_link, abs_link]:
         FsPath(f).unlink()
 
+
+def test_nested_fs():
+    level1     = FsPath(_afs_test_path) / "level1"
+    level1_res = FsPath.cwd() / "level1"
+    level1_res.mkdir(exist_ok=True)
+    level1.symlink_to(level1_res)
+    level2     = level1_res / "level2"
+    level2_res = FsPath(_eos_test_path) / "level2_res"
+    level2_res.mkdir(exist_ok=True)
+    level2.symlink_to(level2_res)
+    level3     = level2_res / "level3"
+    level3_res = FsPath(_afs_test_path) / "level3_res"
+    level3_res.mkdir(exist_ok=True)
+    level3.symlink_to(level3_res)
+    level4     = level3_res / "level4"
+    level4_res = FsPath(_eos_test_path) / "level4_res"
+    level4_res.mkdir(exist_ok=True)
+    level4.symlink_to(level4_res)
+    level5     = level4_res / "level5"
+    level5_res = FsPath.cwd() / "level5_res"
+    level5_res.mkdir(exist_ok=True)
+    level5.symlink_to(level5_res)
+    level6     = level5_res / "level6"
+    level6_res = FsPath(_afs_test_path) / "level6_res"
+    level6_res.mkdir(exist_ok=True)
+    level6.symlink_to(level6_res)
+
+    path = level1 / "level2" / "level3" / "level4" / "level5" / "level6"
+    assert isinstance(path, LocalPath)
+    parents = [f for f in path.parents]
+    expected = [EosPath, AfsPath, EosPath, LocalPath, AfsPath,
+                AfsPath, AfsPath, AfsPath, AfsPath, AfsPath,
+                AfsPath, LocalPath, LocalPath]
+    assert np.all([isinstance(f, exp) for f, exp in zip(parents, expected)])
+    assert isinstance(path.resolve(), AfsPath)
+    parents_res = [f.resolve() for f in path.parents]
+    expected_res = [LocalPath, EosPath, AfsPath, EosPath, LocalPath,
+                    AfsPath, AfsPath, AfsPath, AfsPath, AfsPath,
+                    AfsPath, LocalPath, LocalPath]
+    assert np.all([isinstance(f, exp) for f, exp in zip(parents_res, expected_res)])
+
+    level1.unlink()
+    level2.unlink()
+    level3.unlink()
+    level4.unlink()
+    level5.unlink()
+    level6.unlink()
+    level1_res.rmdir()
+    level2_res.rmdir()
+    level3_res.rmdir()
+    level4_res.rmdir()
+    level5_res.rmdir()
+    level6_res.rmdir()

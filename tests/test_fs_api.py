@@ -44,21 +44,21 @@ def test_fspath_methods():
     print(repr(new_path))
     assert isinstance(new_path, EosPath)
     if afs_accessible:
-        path_afs_link = FsPath("~/afs_test")
+        path_afs_link = FsPath("~/afs_test").expanduser()
         if path_afs_link.lexists():
             path_afs_link.unlink()
         path_afs_link.symlink_to(FsPath(_afs_test_path))
-        test = FsPath("~/afs_test/default_file.txt")
+        test = FsPath("~/afs_test/default_file.txt").expanduser()
         assert isinstance(test, AfsPath)
         test = FsPath.home() / "afs_test" / "default_file.txt"
         assert isinstance(test, AfsPath)
         path_afs_link.unlink()
     if eos_accessible:
-        path_eos_link = FsPath("~/eos_test")
+        path_eos_link = FsPath("~/eos_test").expanduser()
         if path_eos_link.lexists():
             path_eos_link.unlink()
         path_eos_link.symlink_to(FsPath(_eos_test_path))
-        test = FsPath("~/eos_test/default_file.txt")
+        test = FsPath("~/eos_test/default_file.txt").expanduser()
         assert isinstance(test, EosPath)
         test = FsPath.home() / "eos_test" / "default_file.txt"
         assert isinstance(test, EosPath)
@@ -81,7 +81,7 @@ def test_file_io_afs(afs_cmd):
         xaux.fs._skip_afs_software = True
 
     # Make a link to AFS
-    path_afs_link = FsPath("~/afs_test")
+    path_afs_link = FsPath("~/afs_test").expanduser()
     if path_afs_link.lexists():
         path_afs_link.unlink()
     path_afs_link.symlink_to(FsPath(_afs_test_path))
@@ -92,7 +92,7 @@ def test_file_io_afs(afs_cmd):
     assert local_file_1.exists()
     with pytest.raises(NotADirectoryError, match="is not a directory."):
         local_file_1.rmdir()
-    target = FsPath("~/afs_test/default_file_1.txt")
+    target = FsPath("~/afs_test/default_file_1.txt").expanduser()
     assert isinstance(target, AfsPath)
     if target.exists():
         target.unlink()
@@ -106,7 +106,7 @@ def test_file_io_afs(afs_cmd):
     local_file_2 = FsPath("default_file_2.txt")
     local_file_2.touch()
     assert local_file_2.exists()
-    target = FsPath("~/afs_test/default_file_2.txt")
+    target = FsPath("~/afs_test/default_file_2.txt").expanduser()
     assert isinstance(target, AfsPath)
     if target.exists():
         target.unlink()
@@ -125,12 +125,12 @@ def test_file_io_afs(afs_cmd):
         assert file.exists()
         local_files.append(file)
     for i in range(1, 8):
-        target = FsPath(f"~/afs_test/default_file_{i}.txt")
+        target = FsPath(f"~/afs_test/default_file_{i}.txt").expanduser()
         if target.exists():
             target.unlink()
     print(cp(*local_files, "~/afs_test/"))
     for i in range(1, 8):
-        target = FsPath(f"~/afs_test/default_file_{i}.txt")
+        target = FsPath(f"~/afs_test/default_file_{i}.txt").expanduser()
         assert target.exists()
         target.unlink()
         assert not target.exists()
@@ -140,7 +140,7 @@ def test_file_io_afs(afs_cmd):
     # Move several files
     print(mv(*local_files, "~/afs_test/"))
     for i in range(1, 8):
-        target = FsPath(f"~/afs_test/default_file_{i}.txt")
+        target = FsPath(f"~/afs_test/default_file_{i}.txt").expanduser()
         assert target.exists()
         target.unlink()
         assert not target.exists()
@@ -148,7 +148,7 @@ def test_file_io_afs(afs_cmd):
         assert not file.exists()
 
     # Make a directory
-    dir_path = FsPath("~/afs_test/Blibo")
+    dir_path = FsPath("~/afs_test/Blibo").expanduser()
     if dir_path.exists():
         dir_path.rmtree()
     dir_path.mkdir()
@@ -174,10 +174,10 @@ def test_file_io_afs(afs_cmd):
     for file in local_files:
         assert not file.exists()
     for i in range(1, 8):
-        target = FsPath(f"~/afs_test/Blibo/default_file_{i}.txt")
+        target = FsPath(f"~/afs_test/Blibo/default_file_{i}.txt").expanduser()
         assert target.exists()
     # Copy the directory to a new directory
-    new_dir_path = FsPath("~/afs_test/BliboContainer")
+    new_dir_path = FsPath("~/afs_test/BliboContainer").expanduser()
     if new_dir_path.exists():
         new_dir_path.rmtree()
     new_dir_path.mkdir()
@@ -191,7 +191,7 @@ def test_file_io_afs(afs_cmd):
     # Check the copy was successful
     assert FsPath("~/afs_test/BliboContainer/Blibo").exists()
     for i in range(1, 8):
-        target = FsPath(f"~/afs_test/BliboContainer/Blibo/default_file_{i}.txt")
+        target = FsPath(f"~/afs_test/BliboContainer/Blibo/default_file_{i}.txt").expanduser()
         assert target.exists()
     # Check the originals are still present
     assert dir_path.exists()
@@ -206,7 +206,7 @@ def test_file_io_afs(afs_cmd):
     dir_path.rmtree()
     assert not dir_path.exists()
     # Move the new folder back
-    last_dir_path = FsPath("~/afs_test/BliboContainer/Blibo")
+    last_dir_path = FsPath("~/afs_test/BliboContainer/Blibo").expanduser()
     last_dir_path.move_to(last_dir_path / '../..')
     assert not last_dir_path.exists()
     assert new_dir_path.exists()
@@ -243,7 +243,7 @@ def test_file_io_eos(eos_cmd):
         xaux.fs._skip_eos_software = True
 
     # Make a link to EOS
-    path_eos_link = FsPath("~/eos_test")
+    path_eos_link = FsPath("~/eos_test").expanduser()
     if path_eos_link.lexists():
         path_eos_link.unlink()
     path_eos_link.symlink_to(FsPath(_eos_test_path))
@@ -254,7 +254,7 @@ def test_file_io_eos(eos_cmd):
     assert local_file_1.exists()
     with pytest.raises(NotADirectoryError, match="is not a directory."):
         local_file_1.rmdir()
-    target = FsPath("~/eos_test/default_file_1.txt")
+    target = FsPath("~/eos_test/default_file_1.txt").expanduser()
     assert isinstance(target, EosPath)
     if target.exists():
         target.unlink()
@@ -268,7 +268,7 @@ def test_file_io_eos(eos_cmd):
     local_file_2 = FsPath("default_file_2.txt")
     local_file_2.touch()
     assert local_file_2.exists()
-    target = FsPath("~/eos_test/default_file_2.txt")
+    target = FsPath("~/eos_test/default_file_2.txt").expanduser()
     assert isinstance(target, EosPath)
     if target.exists():
         target.unlink()
@@ -287,7 +287,7 @@ def test_file_io_eos(eos_cmd):
         assert file.exists()
         local_files.append(file)
     for i in range(1, 8):
-        target = FsPath(f"~/eos_test/default_file_{i}.txt")
+        target = FsPath(f"~/eos_test/default_file_{i}.txt").expanduser()
         if target.exists():
             target.unlink()
     print(cp(*local_files, "~/eos_test/"))
@@ -302,7 +302,7 @@ def test_file_io_eos(eos_cmd):
     # Move several files
     print(mv(*local_files, "~/eos_test/"))
     for i in range(1, 8):
-        target = FsPath(f"~/eos_test/default_file_{i}.txt")
+        target = FsPath(f"~/eos_test/default_file_{i}.txt").expanduser()
         assert target.exists()
         target.unlink()
         assert not target.exists()
@@ -310,7 +310,7 @@ def test_file_io_eos(eos_cmd):
         assert not file.exists()
 
     # Make a directory
-    dir_path = FsPath("~/eos_test/Blibo")
+    dir_path = FsPath("~/eos_test/Blibo").expanduser()
     if dir_path.exists():
         dir_path.rmtree()
     dir_path.mkdir()
@@ -336,10 +336,10 @@ def test_file_io_eos(eos_cmd):
     for file in local_files:
         assert not file.exists()
     for i in range(1, 8):
-        target = FsPath(f"~/eos_test/Blibo/default_file_{i}.txt")
+        target = FsPath(f"~/eos_test/Blibo/default_file_{i}.txt").expanduser()
         assert target.exists()
     # Copy the directory to a new directory
-    new_dir_path = FsPath("~/eos_test/BliboContainer")
+    new_dir_path = FsPath("~/eos_test/BliboContainer").expanduser()
     if new_dir_path.exists():
         new_dir_path.rmtree()
         assert not new_dir_path.exists()
@@ -354,7 +354,7 @@ def test_file_io_eos(eos_cmd):
     # Check the copy was successful
     assert FsPath("~/eos_test/BliboContainer/Blibo").exists()
     for i in range(1, 8):
-        target = FsPath(f"~/eos_test/BliboContainer/Blibo/default_file_{i}.txt")
+        target = FsPath(f"~/eos_test/BliboContainer/Blibo/default_file_{i}.txt").expanduser()
         assert target.exists()
     # Check the originals are still present
     assert dir_path.exists()
@@ -370,7 +370,7 @@ def test_file_io_eos(eos_cmd):
     dir_path.rmtree()
     assert not dir_path.exists()
     # Move the new folder back
-    last_dir_path = FsPath("~/eos_test/BliboContainer/Blibo")
+    last_dir_path = FsPath("~/eos_test/BliboContainer/Blibo").expanduser()
     last_dir_path.move_to(last_dir_path / '../..')
     assert not last_dir_path.exists()
     assert new_dir_path.exists()

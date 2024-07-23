@@ -3,7 +3,7 @@
 # Copyright (c) CERN, 2024.                 #
 # ######################################### #
 
-import os
+import os, sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .fs import FsPath, _non_strict_resolve
@@ -70,18 +70,19 @@ class EosPath(FsPath, Path):
 
     @classmethod
     def _new(cls, *args, _eos_checked=False):
-        try:
-            self = cls._from_parts(args, in__new__=True).expanduser()
-        except AttributeError:
-            self = object.__new__(cls).expanduser()
-        if not _eos_checked and not _on_eos(self):
-            raise ValueError("The path is not on EOS.")
-        return self
-
-
-    def __new__(cls, *args, _eos_checked=False, _eos_mgm=None):
         if cls is EosPath:
             cls = EosWindowsPath if os.name == 'nt' else EosPosixPath
+        with cls._in_constructor():
+            try:
+                self = cls._from_parts(args)
+            except AttributeError:
+                self = object.__new__(cls)
+            # self = self.expanduser()
+            if not _eos_checked and not _on_eos(self):
+                raise ValueError("The path is not on EOS.")
+        return self
+
+    def __new__(cls, *args, _eos_checked=False, _eos_mgm=None):
         if isinstance(args[0], str) \
         and args[0].startswith('root:'):
             if len(args) > 1:
@@ -110,17 +111,16 @@ class EosPath(FsPath, Path):
                 self._set_eos_path()
                 self.mgm = f'root://eos{self.eos_instance}.{EOS_CELL.lower()}'
         self.eos_path_full = f'{self.mgm}/{self.eos_path}'
-        # try:
-        #     self._accessor.scandir = scandir
-        # except AttributeError:
-        #     self._scandir = scandir
         return self
 
+    def __init__(self, *args):
+        with self.__class__._in_constructor():
+            super().__init__()
 
     def _set_eos_path(self, _eos_instance=None):
-        parts = _non_strict_resolve(self._unnested_parent, _as_posix=True).split('/')
+        parts = _non_strict_resolve(self.expanduser().parent, _as_posix=True).split('/')
         if len(parts) == 2:
-            parts = _non_strict_resolve(self, _as_posix=True).split('/')
+            parts = _non_strict_resolve(self.expanduser(), _as_posix=True).split('/')
         instance_parts = parts[2].split('-')
         eos_instance = _parse_instance(instance_parts[0])
         if _eos_instance is not None and eos_instance != _eos_instance:
@@ -148,40 +148,40 @@ class EosPath(FsPath, Path):
     def exists(self, *args, **kwargs):
         if self.is_symlink():
             return self.resolve().exists(*args, **kwargs)
-        return _eos_exists(self, *args, **kwargs)
+        return _eos_exists(self.expanduser(), *args, **kwargs)
 
     def stat(self, *args, **kwargs):
         # if self.is_symlink():
         #     return self.resolve().stat(*args, **kwargs)
-        return _eos_stat(self, *args, **kwargs)
+        return _eos_stat(self.expanduser(), *args, **kwargs)
 
     def lstat(self, *args, **kwargs):
-        return _eos_lstat(self, *args, **kwargs)
+        return _eos_lstat(self.expanduser(), *args, **kwargs)
 
     def is_file(self, *args, **kwargs):
         if self.is_symlink():
             return self.resolve().is_file(*args, **kwargs)
-        return _eos_is_file(self, *args, **kwargs)
+        return _eos_is_file(self.expanduser(), *args, **kwargs)
 
     def is_dir(self, *args, **kwargs):
         if self.is_symlink():
             return self.resolve().is_dir(*args, **kwargs)
-        return _eos_is_dir(self, *args, **kwargs)
+        return _eos_is_dir(self.expanduser(), *args, **kwargs)
 
     def is_symlink(self, *args, **kwargs):
-        return _eos_is_symlink(self, *args, **kwargs)
+        return _eos_is_symlink(self.expanduser(), *args, **kwargs)
 
     def touch(self, *args, **kwargs):
-        return _eos_touch(self, *args, **kwargs)
+        return _eos_touch(self.expanduser(), *args, **kwargs)
 
     def unlink(self, *args, **kwargs):
-        return _eos_unlink(self, *args, **kwargs)
+        return _eos_unlink(self.expanduser(), *args, **kwargs)
 
     def mkdir(self, *args, **kwargs):
-        return _eos_mkdir(self, *args, **kwargs)
+        return _eos_mkdir(self.expanduser(), *args, **kwargs)
 
     def rmdir(self, *args, **kwargs):
-        return _eos_rmdir(self, *args, **kwargs)
+        return _eos_rmdir(self.expanduser(), *args, **kwargs)
 
     # def glob(self, *args, **kwargs):
     #     raise NotImplementedError
@@ -195,13 +195,13 @@ class EosPath(FsPath, Path):
 
     def symlink_to(self, target, target_is_directory=False, **kwargs):
         target = FsPath(target)
-        return _eos_symlink_to(self, FsPath, target, target_is_directory=target_is_directory, **kwargs)
+        return _eos_symlink_to(self.expanduser(), FsPath, target.expanduser(), target_is_directory=target_is_directory, **kwargs)
 
     def rmtree(self, *args, **kwargs):
-        return _eos_rmtree(self, FsPath, *args, **kwargs)
+        return _eos_rmtree(self.expanduser(), FsPath, *args, **kwargs)
 
     def size(self, *args, **kwargs):
-        return _eos_size(self, FsPath, *args, **kwargs)
+        return _eos_size(self.expanduser(), FsPath, *args, **kwargs)
 
 
 class EosPosixPath(EosPath, PurePosixPath):

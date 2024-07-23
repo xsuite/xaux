@@ -103,10 +103,10 @@ def test_instantiation_afs_access():
     _link_rel = "example_afs_relative_link.txt"
     file_abs = (Path(_afs_test_path) / _file_rel).as_posix()
     rel_link = (Path(_afs_test_path) / _link_rel).as_posix() # on AFS, will point (relative) to _file_rel
-    abs_link = "example_afs_absolute_link.txt"        # on local, will point (absolute) to file_abs
-    fs_link = "afs_test"                              # on local, will point to absolute AFS folder
-    file_fs = (Path(fs_link) / _file_rel).as_posix()  # on local linked folder, equal to file_abs
-    rel_link_fs = (Path(fs_link) / _link_rel).as_posix()   # on local linked folder, will point (relative) to _file_rel
+    abs_link = "example_afs_absolute_link.txt"               # on local, will point (absolute) to file_abs
+    fs_link = "afs_test"                                     # on local, will point to absolute AFS folder
+    file_fs = (Path(fs_link) / _file_rel).as_posix()         # on local linked folder, equal to file_abs
+    rel_link_fs = (Path(fs_link) / _link_rel).as_posix()     # on local linked folder, will point (relative) to _file_rel
     file_local = "example_file.txt"
     link_fs_to_local = (Path(fs_link) / "example_afs_link_to_fs.txt").as_posix() # on local linked folder, will point (absolute) to local file
     abs_link_fs = (Path(fs_link) / "example_afs_double_link.txt").as_posix()     # on local linked folder, will point (absolute) to abs_link

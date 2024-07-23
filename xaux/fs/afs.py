@@ -3,7 +3,7 @@
 # Copyright (c) CERN, 2024.                 #
 # ######################################### #
 
-import os
+import os, sys
 import subprocess
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
@@ -40,7 +40,10 @@ def _on_afs(*args):
         elif args[0] == '/' and len(args) > 1 \
         and (args[1] == 'afs' or args[1] == 'afs/'):
             return True
-    parents = list(_non_strict_resolve(Path(*args).expanduser().absolute().parent).parents)
+    absolute = _non_strict_resolve(Path(*args).expanduser().absolute().parent)
+    if absolute == _afs_path:
+        return True
+    parents = list(absolute.parents)
     return len(parents) > 1 and parents[-2] == _afs_path
 
 
@@ -54,21 +57,31 @@ class AfsPath(FsPath, Path):
     def __new__(cls, *args, _afs_checked=False):
         if cls is AfsPath:
             cls = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
-        try:
-            self = cls._from_parts(args, in__new__=True).expanduser()
-        except AttributeError:
-            self = object.__new__(cls).expanduser()
-        self.afs_cell = _non_strict_resolve(self, _as_posix=True).split('/')[2].upper()
-        if not _afs_checked and not _on_afs(self):
-            raise ValueError("The path is not on AFS.")
+        with cls._in_constructor():
+            try:
+                self = cls._from_parts(args)
+            except AttributeError:
+                self = object.__new__(cls)
+            if not _afs_checked and not _on_afs(self):
+                raise ValueError("The path is not on AFS.")
         return self
+
+    def __init__(self, *args):
+        with self.__class__._in_constructor():
+            super().__init__()
+        with self.__class__._in_constructor(_force=True):
+            parent = self.parent
+        if parent == _afs_path:
+            self.afs_cell = self.name
+        else:
+            self.afs_cell = _non_strict_resolve(parent, _as_posix=True).split('/')[2].upper()
 
     # Overwrite Path methods
     # ======================
 
     def exists(self, *args, **kwargs):
         _assert_afs_accessible("Cannot check for existence of AFS paths.")
-        return Path.exists(self, *args, **kwargs)
+        return Path.exists(self.expanduser(), *args, **kwargs)
 
     def touch(self, *args, **kwargs):
         _assert_afs_accessible("Cannot touch AFS paths.")
@@ -76,7 +89,7 @@ class AfsPath(FsPath, Path):
 
     def symlink_to(self, *args, **kwargs):
         _assert_afs_accessible("Cannot create symlinks on AFS paths.")
-        return Path.symlink_to(self, *args, **kwargs)
+        return Path.symlink_to(self.expanduser(), *args, **kwargs)
 
     # New methods
     # ======================
@@ -84,7 +97,7 @@ class AfsPath(FsPath, Path):
     @property
     def acl(self):
         _assert_fs_installed("Cannot get ACL of AFS paths.")
-        cmd = subprocess.run(['fs', 'la', self.as_posix()],
+        cmd = subprocess.run(['fs', 'la', self.expanduser().as_posix()],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if cmd.returncode == 0:
             acl = {}
@@ -119,7 +132,7 @@ class AfsPath(FsPath, Path):
                 raise ValueError("User in ACL has to be a string.")
             if not isinstance(acl, str):
                 raise ValueError("ACL has to be a string or `None`.")
-            cmd = subprocess.run(['fs', 'sa', self.as_posix(), user, acl],
+            cmd = subprocess.run(['fs', 'sa', self.expanduser().as_posix(), user, acl],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if cmd.returncode != 0:
                 stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
@@ -129,7 +142,7 @@ class AfsPath(FsPath, Path):
     @acl.deleter
     def acl(self):
         _assert_fs_installed("Cannot delete ACL of AFS paths.")
-        cmd = subprocess.run(['fs', 'sa', self.as_posix(), 'none'],
+        cmd = subprocess.run(['fs', 'sa', self.expanduser().as_posix(), 'none'],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if cmd.returncode != 0:
             stderr = cmd.stderr.decode('UTF-8').strip().split('\n')
