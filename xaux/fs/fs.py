@@ -32,6 +32,8 @@ class FsPath:
     is just a regular Path object but with access to the FsPath methods.
     """
     def __new__(cls, *args):
+        if sys.version_info >= (3, 12):
+            raise RuntimeError("This class is not yet compatible with Python 3.12 or higher.")
         from .eos import EosPath, _on_eos
         from .afs import AfsPath, _on_afs
         if _on_eos(*args):
@@ -208,6 +210,8 @@ class LocalPath(FsPath, Path):
     """
 
     def __new__(cls, *args):
+        if sys.version_info >= (3, 12):
+            raise RuntimeError("This class is not yet compatible with Python 3.12 or higher.")
         if cls is LocalPath:
             cls = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
         with cls._in_constructor():

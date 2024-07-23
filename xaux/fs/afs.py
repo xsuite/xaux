@@ -55,6 +55,8 @@ class AfsPath(FsPath, Path):
     __slots__ = ('afs_cell')
 
     def __new__(cls, *args, _afs_checked=False):
+        if sys.version_info >= (3, 12):
+            raise RuntimeError("This class is not yet compatible with Python 3.12 or higher.")
         if cls is AfsPath:
             cls = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
         with cls._in_constructor():

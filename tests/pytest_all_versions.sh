@@ -26,7 +26,7 @@ python -c "import sys; print(f'Testing xaux FS in Python version {sys.version.sp
 pytest $files
 mamba deactivate
 
-mamba activate python3.12
-python -c "import sys; print(f'Testing xaux FS in Python version {sys.version.split()[0]}')"
-pytest $files
-mamba deactivate
+#mamba activate python3.12
+#python -c "import sys; print(f'Testing xaux FS in Python version {sys.version.split()[0]}')"
+#pytest $files
+#mamba deactivate

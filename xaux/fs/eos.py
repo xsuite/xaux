@@ -70,6 +70,8 @@ class EosPath(FsPath, Path):
 
     @classmethod
     def _new(cls, *args, _eos_checked=False):
+        if sys.version_info >= (3, 12):
+            raise RuntimeError("This class is not yet compatible with Python 3.12 or higher.")
         if cls is EosPath:
             cls = EosWindowsPath if os.name == 'nt' else EosPosixPath
         with cls._in_constructor():
