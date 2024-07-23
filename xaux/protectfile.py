@@ -26,7 +26,7 @@ LOCKFILE_NESTING_WAIT = 0.1
 protected_open = {}
 
 def exit_handler():
-    """This handles cleaning of potential leftover lockfiles and backups."""
+    """This handles cleaning of potential leftover lockfiles."""
     for file in protected_open.values():
         file.release(pop=False)
     _tempdir.cleanup()
@@ -64,7 +64,7 @@ def get_fstat(filename):
 
 
 class ProtectFile:
-    """A wrapper around a file pointer, protecting it with a lockfile and backups.
+    """A wrapper around a file pointer, protecting it with a lockfile.
 
     Use
     ---
@@ -99,26 +99,19 @@ class ProtectFile:
         ProtectFile object is destroyed, at which point the temporary file will
         replace the original file. Not used when a ProtectFile object is
         instantiated in read-only mode ('r' or 'rb').
-    backupfile : pathlib.Path
-        The path to a backup file in the same folder. This is to not lose the file
-        in case of a catastrophic crash. This can be switched off by setting
-        'backup_during_lock'=False. On the other hand, the option 'backup'=True
-        will keep the backup file even after destroying the ProtectFile object. Not
-        used when a ProtectFile object is instantiated in read-only mode ('r' or
-        'rb'), unless 'backup_if_readonly'=True.
 
     Examples
     --------
     Reading in a file (while making sure it is not written to by another process):
 
     >>> from xaux import ProtectFile
-    >>> with ProtectFile('thebook.txt', 'r', backup=False, wait=1) as pf:
+    >>> with ProtectFile('thebook.txt', 'r', wait=1) as pf:
     >>>    text = pf.read()
 
     Reading and appending to a file:
 
     >>> from xaux import ProtectFile
-    >>> with ProtectFile('thebook.txt', 'r+', backup=False, wait=1) as pf:
+    >>> with ProtectFile('thebook.txt', 'r+', wait=1) as pf:
     >>>    text = pf.read()
     >>>    pf.write("This string will be added at the end of the file, \
     ...               however, it won't be added to the 'text' variable")
@@ -127,7 +120,7 @@ class ProtectFile:
 
     >>> import json
     >>> from xaux import ProtectFile
-    >>> with ProtectFile(info.json, 'r+', backup=False, wait=1) as pf:
+    >>> with ProtectFile(info.json, 'r+', wait=1) as pf:
     >>>     meta = json.load(pf)
     >>>     meta.update({'author': 'Emperor Claudius'})
     >>>     pf.truncate(0)          # Delete file contents (to avoid appending)
@@ -138,7 +131,7 @@ class ProtectFile:
 
     >>> import pandas as pd
     >>> from xaux import ProtectFile
-    >>> with ProtectFile(mydata.parquet, 'r+b', backup=False, wait=1) as pf:
+    >>> with ProtectFile(mydata.parquet, 'r+b', wait=1) as pf:
     >>>     data = pd.read_parquet(pf)
     >>>     data['x'] += 5
     >>>     pf.truncate(0)          # Delete file contents (to avoid appending)
@@ -162,15 +155,6 @@ class ProtectFile:
         use_temporary : bool, default True
             Whether or not to perform writing operations on a temporary file.
             Ignored when the file is read-only.
-        backup_during_lock : bool, default False
-            Whether or not to use a temporary backup file, to restore in case of
-            failure.
-        backup : bool, default False
-            Whether or not to keep this backup file after the ProtectFile object
-            is destroyed.
-        backup_if_readonly : bool, default False
-            Whether or not to use the backup mechanism when a file is in read-only
-            mode ('r' or 'rb').
         check_hash : bool, default True
             Whether or not to verify by hash that the file did not change during
             the lock.
@@ -189,21 +173,11 @@ class ProtectFile:
         # self._temp:   path to the temporary file on which write operations are applied
         # self._fd:     file pointer to the main file
         #               (self._file if readonly, self._temp if writing)
-        # self._backup: path to backup file
 
         argnames_open = ['file', 'mode', 'buffering', 'encoding', 'errors', 'newline',
                          'closefd', 'opener']
         arg = dict(zip(argnames_open, args))
         arg.update(kwargs)
-
-        # Backup during locking process (set to False for very big files)
-        self._do_backup = arg.pop('backup_during_lock', False)
-        # Keep backup even after unlocking
-        self._keep_backup = arg.pop('backup', False)
-        # If a backup is to be kept, then it should be activated anyhow
-        if self._keep_backup:
-            self._do_backup = True
-        self._backup_if_readonly = arg.pop('backup_if_readonly', False)
 
         # Using a temporary file to write to
         self._use_temporary = arg.pop('use_temporary', True)
@@ -217,7 +191,7 @@ class ProtectFile:
         self._temp = FsPath(_tempdir.name, file.name + ranID()).resolve()
 
         # We throw potential FileNotFoundError and FileExistsError before
-        # creating the backup and temporary files
+        # creating the temporary file
         self._exists = True if self.file.is_file() else False
         if not self._exists and self.file.exists():
             raise NotImplementedError("ProtectFile does not yet support "
@@ -253,7 +227,6 @@ class ProtectFile:
 
         # Override defaults in case of nested lockfiles
         if self._nesting_level > 0:
-            self._do_backup = False
             self._use_temporary = False
             if self._testing_nested:
                 max_lock_time = 0.3  # only for tests
@@ -346,16 +319,6 @@ class ProtectFile:
                     else:
                         raise RuntimeError("Too many lockfiles!")
 
-        # Make a backup if requested
-        if self._readonly and not self._backup_if_readonly:
-            self._do_backup = False
-        if self._do_backup and self._exists:
-            self._backup = FsPath(file.parent, file.name + '.backup').resolve()
-            self._print_debug("init", f"cp {self.file=} to {self.backupfile=}")
-            self.file.copy_to(self.backupfile)
-        else:
-            self._backup = None
-
         # Store stats (to check if file got corrupted later)
         if self._nesting_level == 0 and self._check_hash and self._exists:
             self._size = self.file.size()
@@ -439,7 +402,8 @@ class ProtectFile:
         if 'free_after' in info and info['free_after'] > 0 and info['free_after'] < time.time():
             # Max runtime was expired. No issue (passed all checks) but output warning as info
             print(f"Warning: Job {self._file} took longer than expected ("
-                + f"{round(time.time() - info['free_after'])}s.")
+                + f"{round(time.time() - info['free_after'])}s. No corruption took place, "
+                + f"but it might be advised to increase max_lock_time.")
         return True
 
 
@@ -458,7 +422,7 @@ class ProtectFile:
         # Check that the lock is still ours
         if not self._lock_is_ours(self.lockfile):
             print(f"Error: lockfile {self.lockfile} is not ours anymore.")
-            self.restore()
+            self.save_state()
             self.release()
             return
         # Check that original file was not modified in between (i.e. corrupted)
@@ -475,9 +439,8 @@ class ProtectFile:
             print(f"Error: File {self.file} changed during lock! "
                 + f"Original size: {self._size}, new size: {new_size}. "
                 + f"Original hash: {self._hash}, new hash: {new_hash}.")
-            # If corrupted, restore from backup
             # and move result of calculation (i.e. tempfile) to the parent folder
-            self.restore()
+            self.save_state()
         else:
             # All is fine: move result from temporary file to original
             self.mv_temp()
@@ -496,9 +459,6 @@ class ProtectFile:
     def tempfile(self):
         return self._temp
 
-    @property
-    def backupfile(self):
-        return self._backup
 
     def mv_temp(self, destination=None):
         """Move temporary file to 'destination' (the original file if destination=None)"""
@@ -513,7 +473,7 @@ class ProtectFile:
                 # if self._check_hash and get_hash(self.tempfile) != get_hash(self.file):
                 #     print(f"Warning: tried to copy temporary file {self.tempfile} into {self.file}, "
                 #           + "but hashes do not match!")
-                #     self.restore()
+                #     self.save_state()
             else:
                 self._print_debug("mv_temp", f"cp {self.tempfile=} to {destination=}")
                 self.tempfile.copy_to(destination)
@@ -521,14 +481,10 @@ class ProtectFile:
             self.tempfile.unlink()
 
 
-    def restore(self):
-        """Restore the original file from backup and save calculation results"""
+    def save_state(self):
+        """Save calculation results in case of failure"""
         if not self._access:
             return
-        if self._do_backup:
-            self._print_debug("restore", f"rename {self.backupfile} into {self.file}")
-            self.backupfile.rename(self.file)
-            print('Restored file to previous state.')
         if self._use_temporary:
             extension = f"__{datetime.datetime.now().isoformat()}.result"
             alt_file = FsPath(self.file.parent, self.file.name + extension).resolve()
@@ -537,7 +493,7 @@ class ProtectFile:
 
 
     def release(self, pop=True):
-        """Clean up lockfile, tempfile, and backupfile"""
+        """Clean up lockfile and tempfile"""
         if not self._access:
             return
         # Overly verbose in checking, as to make sure this never fails
@@ -550,12 +506,6 @@ class ProtectFile:
         if hasattr(self,'_temp') and hasattr(self._temp,'is_file') and self._temp.is_file():
             self._print_debug("release", f"unlink {self.tempfile}")
             self.tempfile.unlink()
-        # Delete backup file
-        if hasattr(self,'_do_backup') and self._do_backup and \
-        hasattr(self,'_backup') and hasattr(self._backup,'is_file') and self._backup.is_file():
-            if not hasattr(self,'_keep_backup') or not self._keep_backup:
-                self._print_debug("release", f"unlink {self.backupfile}")
-                self.backupfile.unlink()
         # Delete lockfile
         if hasattr(self,'_lock') and hasattr(self._lock,'is_file') and self._lock.is_file():
             self._print_debug("release", f"unlink {self.lockfile}")

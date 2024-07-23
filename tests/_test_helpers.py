@@ -33,7 +33,7 @@ def rewrite(pf, with_copy=False):
 
 def change_file_protected(fname, with_copy=False, max_lock_time=None, error_queue=None):
     try:
-        with ProtectFile(fname, "r+", backup=False, wait=0.1, max_lock_time=max_lock_time) as pf:
+        with ProtectFile(fname, "r+", wait=0.1, max_lock_time=max_lock_time) as pf:
             rewrite(pf, with_copy=with_copy)
     except Exception as e:
         if error_queue is None:
@@ -54,7 +54,7 @@ def init_file(fname):
     for f in FsPath.cwd().glob(f"{fname}.lock*"):
         f.unlink()
     # Initialise file
-    with ProtectFile(fname, "w", backup=False, wait=1) as pf:
+    with ProtectFile(fname, "w", wait=1) as pf:
         json.dump({"myint": 0}, pf, indent=4)
 
 
