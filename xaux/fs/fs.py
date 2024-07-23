@@ -4,6 +4,8 @@
 # ######################################### #
 
 import os, sys
+from subprocess import run, PIPE, CalledProcessError
+from time import sleep
 from shutil import rmtree
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -176,6 +178,21 @@ class FsPath:
 
     # New methods
     # ===========
+
+    def getfid(self):
+        cmd = run(['ls', '-i', self.expanduser().as_posix()],
+                    stdout=PIPE, stderr=PIPE)
+        if cmd.returncode == 0:
+            stdout = cmd.stdout.decode('UTF-8').strip()
+            return int(stdout.split()[0])
+        return -1
+
+    def flush(self):
+        cmd = run(['sync', self.expanduser().as_posix()],
+                    stdout=PIPE, stderr=PIPE)
+        if cmd.returncode:
+            sleep(1)
+        self.touch()
 
     def lexists(self, *args, **kwargs):
         return self.is_symlink(*args, **kwargs) or self.exists(*args, **kwargs)
