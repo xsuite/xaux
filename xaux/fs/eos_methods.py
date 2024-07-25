@@ -16,6 +16,8 @@ default_eos_instance = 'public'
 
 _eos_path = Path('/eos')
 
+_eos_version = -1
+_eos_version_int = -1
 _eos_arg_for_find = 'find'
 _eoscmd_installed = False
 if os.name != 'nt':

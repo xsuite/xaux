@@ -138,7 +138,8 @@ def test_instantiation_local():
     for f in [file, rel_link, abs_link]:
         FsPath(f).unlink()
 
-
+@pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
+@pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
 def test_nested_fs():
     level1     = FsPath(_afs_test_path) / "level1"
     level1_res = FsPath.cwd() / "level1"
