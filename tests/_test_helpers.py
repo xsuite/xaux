@@ -15,19 +15,19 @@ from xaux import ProtectFile, FsPath
 ProtectFile._debug = True
 
 
-def rewrite(pf):
+def rewrite(pf, runtime=0.2):
     data = json.load(pf)
-    time.sleep(0.2)
+    time.sleep(runtime)
     data["myint"] += 1
     pf.seek(0)  # revert point to beginning of file
     json.dump(data, pf, indent=4, sort_keys=True)
     pf.truncate()
 
 
-def change_file_protected(fname, max_lock_time=None, error_queue=None):
+def change_file_protected(fname, max_lock_time=None, error_queue=None, wait=0.1, runtime=0.2):
     try:
-        with ProtectFile(fname, "r+", wait=0.1, max_lock_time=max_lock_time) as pf:
-            rewrite(pf)
+        with ProtectFile(fname, "r+", wait=wait, max_lock_time=max_lock_time) as pf:
+            rewrite(pf, runtime)
     except Exception as e:
         if error_queue is None:
             raise e

@@ -15,31 +15,32 @@ from _test_helpers import init_file, change_file_protected, propagate_child_erro
 
 def test_max_lock_time():
     fname = "test_max_lock_time.json"
+    lock_file = f"{fname}.lock"
     init_file(fname)
 
     error_queue = Queue()
-    procA = Process(target=change_file_protected, args=(fname, False, 1, error_queue))
-    procB = Process(target=change_file_protected, args=(fname, False, 1, error_queue))
+    procA = Process(target=change_file_protected, args=(fname, 1, error_queue, 0.3, 0.4))
+    procB = Process(target=change_file_protected, args=(fname, 1, error_queue, 0.3, 0.4))
 
-    procA.start() # Will take > 0.2s
-    time.sleep(0.18)
-    assert Path(f"{fname}.lock").exists()
+    procA.start() # Lock takes 0.1s - 0.2s to create (due to flush) and job takes 0.2s to complete
+    time.sleep(0.48)
+    assert Path(lock_file).exists()
 
     # B will try to access the file while A is still running, and will try
-    # again ~0.1s later by which time A has finished (and the lock will have
+    # again ~0.3s later by which time A has finished (and the lock will have
     # disappeared).
     procB.start()
 
     # A finished, B did not retry yet
-    time.sleep(0.05)
-    assert not Path(f"{fname}.lock").exists()  # B did not retry yet
+    time.sleep(0.15)
+    assert not Path(lock_file).exists()  # B did not retry yet
     with open(fname, "r+") as pf:
         data = json.load(pf)
         assert data["myint"] == 1              # A finished
 
     # Now B is running
-    time.sleep(0.08)
-    assert Path(f"{fname}.lock").exists()
+    time.sleep(0.3)
+    assert Path(lock_file).exists()
 
     procA.join()
     procB.join()
@@ -58,8 +59,8 @@ def test_max_lock_time_crashed():
     init_file(fname)
 
     error_queue = Queue()
-    procA = Process(target=change_file_protected, args=(fname, False, 5, error_queue))
-    procB = Process(target=change_file_protected, args=(fname, False, 5, error_queue))
+    procA = Process(target=change_file_protected, args=(fname, 5, error_queue))
+    procB = Process(target=change_file_protected, args=(fname, 5, error_queue))
 
     procA.start()
     procB.start()
