@@ -6,13 +6,13 @@
 from multiprocessing import Pool
 import pytest
 import json
-from pathlib import Path
+from xaux import FsPath
 
 from _test_helpers import init_file, change_file_protected, change_file_standard
 
 
 def test_deliberate_failure():
-    fname = "test_standard.json"
+    fname = "standard_file.json"
     init_file(fname)
 
     workers = 4
@@ -23,12 +23,12 @@ def test_deliberate_failure():
         data = json.load(pf)
         assert data["myint"] != workers  # assert that result is wrong
 
-    Path(fname).unlink()
+    FsPath(fname).unlink()
 
 
 @pytest.mark.parametrize("workers", [4, 100])
 def test_protection(workers):
-    fname = "test_protection.json"
+    fname = "protected_file.json"
     init_file(fname)
 
     with Pool(processes=workers) as pool:
@@ -38,5 +38,5 @@ def test_protection(workers):
         data = json.load(pf)
         assert data["myint"] == workers
 
-    Path(fname).unlink()
+    FsPath(fname).unlink()
 

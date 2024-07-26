@@ -220,13 +220,13 @@ class ProtectFile:
         self._access = False
         while True:
             try:
-                self.lockfile.getfid() # Look up the file on the server
-                flock = io.open(self.lockfile, 'x')
+                self._create_lock(max_lock_time=max_lock_time)
                 # Success! Or is it....?
                 # We are in the lockfile, but there is still one potential concurrency,
                 # namely another process could have started creating the file while we
                 # did not see it having been created yet...
-                if not self._lock_is_available(flock, max_lock_time):
+                self._flush_lock()
+                if not self._lock_is_ours():
                     self._wait(wait)
                     continue
                 self._print_debug("init", f"created {self.lockfile}")
@@ -271,19 +271,17 @@ class ProtectFile:
                         if self.lockfile.is_file():
                             self._wait(wait)
                             continue
-                        # Touch it to create it (with `eos` command)
-                        self.lockfile.touch()
                         # Make a local lockfile that has the sysinfo
                         local_lockfile = FsPath(_tempdir.name, file.name + '.lock').resolve()
                         if local_lockfile.exists():
                             local_lockfile.unlink()
-                        flock = io.open(local_lockfile, 'x')
+                        self._create_lock(local_lockfile, max_lock_time, local=True)
                         self._print_debug("init", f"created local {local_lockfile}")
-                        if not self._lock_is_available(flock, max_lock_time, local_lockfile):
+                        self._flush_lock(local_lockfile)
+                        if not self._lock_is_ours(local_lockfile):
                             self._wait(wait)
                             continue
                         self._print_debug("init", f"created {self.lockfile} via eos cp")
-                        self._access = True
                         break
                     except PermissionError:
                         # This means the `eos` command has failed as well: we really don't have access
@@ -322,42 +320,59 @@ class ProtectFile:
         self._print_debug("init", f"waiting {this_wait}s to create {self.lockfile}")
         time.sleep(this_wait)
 
-    def _lock_is_available(self, flock, max_lock_time=None, local_file=None):
-        # flock is either a file pointer to the lockfile (normal use)
-        # or a local file that will then replace it after checking
-        # Write sysinfo to flock
+
+    def _create_lock(self, lockfile=None, max_lock_time=None):
+        self.lockfile.getfid() # Look up the file on the server
+        if lockfile is None:
+            lockfile = self.lockfile
         free_after = -1
         if max_lock_time is not None:
-            free_after = time.time() + max_lock_time
-        self._ran = random.randint(0, 2**63 - 1) + os.getpid() + int(time.time_ns() % 1e9)
-        self._machine = os.uname().nodename
-        json.dump({
-            'ran':     self._ran,
-            'machine': self._machine,
-            'free_after': free_after
-        }, flock)
-        flock.close()
-        if local_file is not None:
-            # If we are using a local file, we have to replace the lockfile
-            local_file.move_to(self.lockfile)  # can use `eos` command
-            assert not local_file.is_file()    # sanity check
-        # Flush the file from the server
+            free_after = int(time.time() + max_lock_time)
+        # We ensure that the variables in the lockfile always have a fixed number of characters
+        ran = random.randint(0, 2**63 - 1) + os.getpid() + int(time.time_ns() % 1e9)
+        self._ran = f"{ran:0>20d}"
+        self._machine = f"{os.uname().nodename: >35s}"[:35]
+        with lockfile.open('x') as flock:
+            json.dump({
+                'ran':     self._ran,
+                'machine': self._machine,
+                'free_after': free_after
+            }, flock)
+
+
+    def _flush_lock(self, local_lockfile=None):
+        if local_lockfile:
+            # Move it to the server lockfile
+            local_lockfile.move_to(self.lockfile)  # can use specialised server commands
+            assert not local_lockfile.is_file()    # sanity check
+        # Flush the file on the server
         self.lockfile.flush()
         time.sleep(random.uniform(0.1, 0.2))
-        # Check the lockfile again
-        if local_file is None:
-            lockfile = self.lockfile
+        if local_lockfile:
+            # Move it to the server lockfile
+            self.lockfile.copy_to(local_lockfile)  # can use specialised server commands
+            assert local_lockfile.is_file()    # sanity check
+
+
+    def _lock_is_empty(self, i=1):
+        if i > 15:
+            return True
+        if self.lockfile.size() > 0:
+            return False
         else:
-            # If we are using a local file, we have to copy lockfile back here
-            self.lockfile.copy_to(local_file)  # can use `eos` command
-            lockfile = local_file
-        is_ours = self._lock_is_ours(lockfile)
-        if local_file is not None:
-            local_file.unlink()
-        return is_ours
+            self._wait(0.2)
+            return self._lock_is_empty(i+1)
 
 
-    def _lock_is_ours(self, lockfile):
+    def _lock_is_ours(self, lockfile=None):
+        if lockfile is None:
+            lockfile = self.lockfile
+        if not lockfile.exists():
+            return False
+        if self._lock_is_empty():
+            self._print_debug("lock_is_ours", f"lockfile {lockfile} is empty")
+            lockfile.unlink()
+            return False
         try:
             with lockfile.open('r') as fid:
                 info = json.load(fid)
@@ -390,8 +405,6 @@ class ProtectFile:
         if not self._fd.closed:
             self._fd.close()
         # Check that the lock is still ours
-        self.lockfile.flush()
-        time.sleep(random.uniform(0.1, 0.2))
         if not self._lock_is_ours(self.lockfile):
             self._delete_lock_at_finish = False
             self.stop_with_error(f"Lockfile {self.lockfile} is not ours anymore.")
@@ -426,6 +439,9 @@ class ProtectFile:
         else:
             # All is fine: move result from temporary file to original
             self.mv_temp()
+            # Flag the changes to the server
+            self.file.getfid()
+            time.sleep(random.uniform(0.1, 0.2))
             self.release()
 
 
@@ -484,9 +500,6 @@ class ProtectFile:
         # Close main file pointer
         if hasattr(self,'_fd') and hasattr(self._fd,'closed') and not self._fd.closed:
             self._fd.close()
-        # Flag the changes to the server
-        self.file.getfid()
-        time.sleep(random.uniform(0.1, 0.2))
         # Delete temporary file
         if hasattr(self,'_temp') and hasattr(self._temp,'is_file') and self._temp.is_file():
             self._print_debug("release", f"unlink {self.tempfile}")
@@ -500,9 +513,11 @@ class ProtectFile:
         if pop:
             protected_open.pop(self._file, 0)
 
+
     def _print_debug(self, prc, msg):
         if self._debug:
             print(f"({self._file.name}) {prc}: {msg}\n")
+
 
 class ProtectFileError(Exception):
     def __init__(self, message, results_saved, alt_file):
