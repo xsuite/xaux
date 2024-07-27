@@ -246,8 +246,8 @@ class ProtectFile:
                         if self._testing:
                             # This is only for tests, to be able to kill the process
                             time.sleep(1)
-                        if 'free_after' in info and info['free_after'] > 0 \
-                        and info['free_after'] < time.time():
+                        if 'free_after' in info and int(info['free_after']) > 0 \
+                        and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
                             # and then we go to the next step in the while loop.
                             # Note that this does not necessarily imply this process
@@ -336,7 +336,7 @@ class ProtectFile:
             json.dump({
                 'ran':     self._ran,
                 'machine': self._machine,
-                'free_after': free_after
+                'free_after': f"{free_after:15d}"[:15]
             }, flock)
 
 
@@ -417,10 +417,10 @@ class ProtectFile:
             self._delete_lock_at_finish = False
             self.stop_with_error("Loading JSON from lockfile failed.")
             return
-        if 'free_after' in info and info['free_after'] > 0 and info['free_after'] < time.time():
+        if 'free_after' in info and int(info['free_after']) > 0 and int(info['free_after']) < time.time():
             # Max runtime was expired. We have to forfeit the job as this is a potential failure point.
             self.stop_with_error(f"Error: Job {self._file} took longer than expected ("
-                + f"{round(time.time() - info['free_after'])}s. Increase max_lock_time.")
+                + f"{round(time.time() - int(info['free_after']))}s. Increase max_lock_time.")
             return
         # Check that original file was not modified in between (i.e. corrupted)
         file_changed = False
