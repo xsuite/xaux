@@ -232,7 +232,7 @@ class ProtectFile:
                 self._print_debug("init", f"created {self.lockfile}")
                 break
 
-            except FileNotExistsError:
+            except FileNotFoundError:
                 # Lockfile could not be created, wait and try again
                 self._wait(wait)
                 pass
