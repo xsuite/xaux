@@ -100,8 +100,14 @@ then
     echo "Fatal error: poetry --dry-run expected $expected_ver, but result is $new_ver..."
     exit 1
 fi
-sed -i "s/\(__version__ =\).*/\1 '"${new_ver}"'/"         xaux/general.py
-sed -i "s/\(assert __version__ ==\).*/\1 '"${new_ver}"'/" tests/test_version.py
+if [[ "$OSTYPE" == "darwin"* ]]
+then
+    sed -i '' "s/\(__version__ =\).*/\1 '"${new_ver}"'/"         xaux/general.py
+    sed -i '' "s/\(assert __version__ ==\).*/\1 '"${new_ver}"'/" tests/test_version.py
+else
+    sed -i'' "s/\(__version__ =\).*/\1 '"${new_ver}"'/"         xaux/general.py
+    sed -i'' "s/\(assert __version__ ==\).*/\1 '"${new_ver}"'/" tests/test_version.py
+fi
 echo "Committing version change..."
 git reset
 git add pyproject.toml xaux/general.py tests/test_version.py
