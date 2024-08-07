@@ -232,17 +232,22 @@ class ProtectFile:
                 self._print_debug("init", f"created {self.lockfile}")
                 break
 
+            except FileNotFoundError:
+                # Lockfile could not be created, wait and try again
+                self._wait(wait)
+                pass
+
             except FileExistsError:
                 # Lockfile exists, wait and try again
                 self._wait(wait)
                 if max_lock_time is not None:
                     try:
                         kill_lock = False
-                        with self.lockfile.open('r') as fid:
-                            try:
+                        try:
+                            with self.lockfile.open('r') as fid:
                                 info = json.load(fid)
-                            except:
-                                continue
+                        except:
+                            continue
                         if self._testing:
                             # This is only for tests, to be able to kill the process
                             time.sleep(1)
