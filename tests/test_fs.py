@@ -144,26 +144,38 @@ def test_nested_fs():
     level1     = FsPath(_afs_test_path) / "level1"
     level1_res = FsPath.cwd() / "level1"
     level1_res.mkdir(exist_ok=True)
+    if level1.lexists():
+        level1.unlink()
     level1.symlink_to(level1_res)
     level2     = level1_res / "level2"
     level2_res = FsPath(_eos_test_path) / "level2_res"
     level2_res.mkdir(exist_ok=True)
+    if level2.lexists():
+        level2.unlink()
     level2.symlink_to(level2_res)
     level3     = level2_res / "level3"
     level3_res = FsPath(_afs_test_path) / "level3_res"
     level3_res.mkdir(exist_ok=True)
+    if level3.lexists():
+        level3.unlink()
     level3.symlink_to(level3_res)
     level4     = level3_res / "level4"
     level4_res = FsPath(_eos_test_path) / "level4_res"
     level4_res.mkdir(exist_ok=True)
+    if level4.lexists():
+        level4.unlink()
     level4.symlink_to(level4_res)
     level5     = level4_res / "level5"
     level5_res = FsPath.cwd() / "level5_res"
     level5_res.mkdir(exist_ok=True)
+    if level5.lexists():
+        level5.unlink()
     level5.symlink_to(level5_res)
     level6     = level5_res / "level6"
     level6_res = FsPath(_afs_test_path) / "level6_res"
     level6_res.mkdir(exist_ok=True)
+    if level6.lexists():
+        level6.unlink()
     level6.symlink_to(level6_res)
 
     path = level1 / "level2" / "level3" / "level4" / "level5" / "level6"
