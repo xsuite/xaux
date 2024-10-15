@@ -3,8 +3,9 @@ This package is an attempt to make file reading/writing (possibly concurrent) mo
 
 Last update 23/03/2024 - F.F. Van der Veken
 """
-
+import sys
 import atexit
+import signal
 import datetime
 import hashlib
 import io
@@ -20,6 +21,7 @@ from .tools import ranID
 
 protected_open = {}
 
+# The functions registered via this module are not called when the program is killed by a signal not handled by Python, when a Python fatal internal error is detected, or when os._exit() is called.
 def exit_handler():
     """This handles cleaning of potential leftover lockfiles."""
     for file in protected_open.values():
@@ -27,6 +29,12 @@ def exit_handler():
     _tempdir.cleanup()
 atexit.register(exit_handler)
 
+# This one should handle those exceptions.
+# def kill_handler(*args):
+#     exit_handler()
+#     sys.exit(0)
+# signal.signal(signal.SIGINT, kill_handler)
+# signal.signal(signal.SIGTERM, kill_handler)
 
 def get_hash(filename, size=128):
     """Get a fast hash of a file, in chunks of 'size' (in kb)"""
