@@ -241,6 +241,7 @@ class ProtectFile:
                 break
 
             except OSError:
+                print('__init__ -> OSError:')
                 # An error happen while trying to generate the Lockfile. This raise an 
                 # OSError: [Errno 5] Input/output error!
                 # As no Lockfile remain, I assume this is cause by the Lockfile being
@@ -249,24 +250,31 @@ class ProtectFile:
                 pass
 
             except FileNotFoundError:
+                print('__init__ -> FileNotFoundError:')
                 # Lockfile could not be created, wait and try again
                 self._wait(wait)
                 pass
 
             except FileExistsError:
+                print(f'__init__ -> FileExistsError:  {max_lock_time=}')
                 # Lockfile exists, wait and try again
                 self._wait(wait)
                 if max_lock_time is not None:
                     try:
+                        print(f'__init__ -> FileExistsError:  try 1 begin')
                         kill_lock = False
                         try:
+                            print(f'__init__ -> FileExistsError:  try 2 begin')
                             with self.lockfile.open('r') as fid:
                                 info = json.load(fid)
+                            print(f'__init__ -> FileExistsError:  try 2 succed')
                         except:
+                            print(f'__init__ -> FileExistsError:  try 2 fail')
                             continue
                         if self._testing:
                             # This is only for tests, to be able to kill the process
                             time.sleep(1)
+                        print(f'__init__ -> FileExistsError:  {info=}')
                         if 'free_after' in info and int(info['free_after']) > 0 \
                         and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
@@ -285,6 +293,7 @@ class ProtectFile:
                         pass
 
             except PermissionError:
+                print('__init__ -> PermissionError:')
                 # Special case: we can still access eos files when permission has expired, using `eos`
                 if isinstance(self.file, EosPath):
                     try:
