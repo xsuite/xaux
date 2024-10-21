@@ -241,7 +241,7 @@ class ProtectFile:
                 break
 
             except OSError:
-                print('__init__ -> OSError:')
+                print(f'__init__ -> OSError: {self.lockfile.exists()=}')
                 # An error happen while trying to generate the Lockfile. This raise an 
                 # OSError: [Errno 5] Input/output error!
                 self._wait(wait)
@@ -270,6 +270,7 @@ class ProtectFile:
                             # gets to use the file; which is the intended behaviour
                             # (first one wins).
                             kill_lock = True
+                        print(f'__init__ -> OSError:  {kill_lock=}')
                         if kill_lock:
                             self.lockfile.unlink()
                             self._print_debug("init",f"freed {self.lockfile} because "
