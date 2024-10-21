@@ -241,27 +241,21 @@ class ProtectFile:
                 break
 
             except OSError:
-                print(f'__init__ -> OSError: {self.lockfile.exists()=}')
                 # An error happen while trying to generate the Lockfile. This raise an 
                 # OSError: [Errno 5] Input/output error!
                 self._wait(wait)
                 if self.lockfile.exists():
 #                 if max_lock_time is not None and self.lockfile.exists():
                     try:
-                        print(f'__init__ -> OSError:  try 1 begin')
                         kill_lock = False
                         try:
-                            print(f'__init__ -> OSError:  try 2 begin')
                             with self.lockfile.open('r') as fid:
                                 info = json.load(fid)
-                            print(f'__init__ -> OSError:  try 2 succed')
                         except:
-                            print(f'__init__ -> OSError:  try 2 fail')
                             continue
                         if self._testing:
                             # This is only for tests, to be able to kill the process
                             time.sleep(1)
-                        print(f'__init__ -> OSError:  {info=}')
                         if 'free_after' in info and int(info['free_after']) > 0 \
                         and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
@@ -270,7 +264,6 @@ class ProtectFile:
                             # gets to use the file; which is the intended behaviour
                             # (first one wins).
                             kill_lock = True
-                        print(f'__init__ -> OSError:  {kill_lock=}')
                         if kill_lock:
                             self.lockfile.unlink()
                             self._print_debug("init",f"freed {self.lockfile} because "
@@ -282,31 +275,24 @@ class ProtectFile:
                 pass
 
             except FileNotFoundError:
-                print('__init__ -> FileNotFoundError:')
                 # Lockfile could not be created, wait and try again
                 self._wait(wait)
                 pass
 
             except FileExistsError:
-                print(f'__init__ -> FileExistsError:  {max_lock_time=}')
                 # Lockfile exists, wait and try again
                 self._wait(wait)
                 if max_lock_time is not None:
                     try:
-                        print(f'__init__ -> FileExistsError:  try 1 begin')
                         kill_lock = False
                         try:
-                            print(f'__init__ -> FileExistsError:  try 2 begin')
                             with self.lockfile.open('r') as fid:
                                 info = json.load(fid)
-                            print(f'__init__ -> FileExistsError:  try 2 succed')
                         except:
-                            print(f'__init__ -> FileExistsError:  try 2 fail')
                             continue
                         if self._testing:
                             # This is only for tests, to be able to kill the process
                             time.sleep(1)
-                        print(f'__init__ -> FileExistsError:  {info=}')
                         if 'free_after' in info and int(info['free_after']) > 0 \
                         and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
@@ -325,7 +311,6 @@ class ProtectFile:
                         pass
 
             except PermissionError:
-                print('__init__ -> PermissionError:')
                 # Special case: we can still access eos files when permission has expired, using `eos`
                 if isinstance(self.file, EosPath):
                     try:
