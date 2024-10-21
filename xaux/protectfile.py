@@ -268,7 +268,6 @@ class ProtectFile:
                             self.lockfile.unlink()
                             self._print_debug("init",f"freed {self.lockfile} because "
                                                 + "of exceeding max_lock_time")
-                        print(f'__init__ -> OSError: END! and continue')
                     except FileNotFoundError:
                         # All is fine, the lockfile disappeared in the meanwhile.
                         # Return to the while loop.
@@ -278,7 +277,7 @@ class ProtectFile:
             except FileNotFoundError:
                 # Lockfile could not be created, wait and try again
                 self._wait(wait)
-                pass
+                continue
 
             except FileExistsError:
                 # Lockfile exists, wait and try again
