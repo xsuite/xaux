@@ -6,6 +6,7 @@ Last update 23/03/2024 - F.F. Van der Veken
 import sys
 import atexit
 import signal
+import traceback
 import datetime
 import hashlib
 import io
@@ -30,9 +31,10 @@ def exit_handler():
 atexit.register(exit_handler)
 
 # This one should handle those exceptions.
-def kill_handler(*args):
+def kill_handler(signum, frame):
     exit_handler()
-    print(args)
+    print(f"Signal {signum} has been raised.\n\n BackTrack:")
+    traceback.print_stack(frame)
     sys.exit(0)
 signal.signal(signal.SIGINT, kill_handler)
 signal.signal(signal.SIGTERM, kill_handler)
