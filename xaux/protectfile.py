@@ -30,11 +30,11 @@ def exit_handler():
 atexit.register(exit_handler)
 
 # This one should handle those exceptions.
-# def kill_handler(*args):
-#     exit_handler()
-#     sys.exit(0)
-# signal.signal(signal.SIGINT, kill_handler)
-# signal.signal(signal.SIGTERM, kill_handler)
+def kill_handler(*args):
+    exit_handler()
+    sys.exit(0)
+signal.signal(signal.SIGINT, kill_handler)
+signal.signal(signal.SIGTERM, kill_handler)
 
 def get_hash(filename, size=128):
     """Get a fast hash of a file, in chunks of 'size' (in kb)"""
