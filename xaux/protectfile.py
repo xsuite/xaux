@@ -244,10 +244,9 @@ class ProtectFile:
                 print('__init__ -> OSError:')
                 # An error happen while trying to generate the Lockfile. This raise an 
                 # OSError: [Errno 5] Input/output error!
-                # As no Lockfile remain, I assume this is cause by the Lockfile being
-                # removed while this jobs try to create it.
                 self._wait(wait)
-                if max_lock_time is not None:
+                if self.lockfile.exists():
+#                 if max_lock_time is not None and self.lockfile.exists():
                     try:
                         print(f'__init__ -> OSError:  try 1 begin')
                         kill_lock = False
