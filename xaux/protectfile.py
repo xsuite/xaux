@@ -35,7 +35,7 @@ def kill_handler(signum, frame):
     exit_handler()
     print(f"\n\nTraceback (most recent call last):")
     traceback.print_stack(frame)
-    print(f"\n{signal.Signals(signum).name}: [Errno {signum}] A signal has been raised.")
+    print(f"{signal.Signals(signum).name}: [Errno {signum}] A signal has been raised.")
     sys.exit(0)
 signal.signal(signal.SIGINT, kill_handler)
 signal.signal(signal.SIGTERM, kill_handler)
