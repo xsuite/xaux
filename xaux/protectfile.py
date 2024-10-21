@@ -247,6 +247,38 @@ class ProtectFile:
                 # As no Lockfile remain, I assume this is cause by the Lockfile being
                 # removed while this jobs try to create it.
                 self._wait(wait)
+                if max_lock_time is not None:
+                    try:
+                        print(f'__init__ -> OSError:  try 1 begin')
+                        kill_lock = False
+                        try:
+                            print(f'__init__ -> OSError:  try 2 begin')
+                            with self.lockfile.open('r') as fid:
+                                info = json.load(fid)
+                            print(f'__init__ -> OSError:  try 2 succed')
+                        except:
+                            print(f'__init__ -> OSError:  try 2 fail')
+                            continue
+                        if self._testing:
+                            # This is only for tests, to be able to kill the process
+                            time.sleep(1)
+                        print(f'__init__ -> OSError:  {info=}')
+                        if 'free_after' in info and int(info['free_after']) > 0 \
+                        and int(info['free_after']) < time.time():
+                            # We free the original process by deleting the lockfile
+                            # and then we go to the next step in the while loop.
+                            # Note that this does not necessarily imply this process
+                            # gets to use the file; which is the intended behaviour
+                            # (first one wins).
+                            kill_lock = True
+                        if kill_lock:
+                            self.lockfile.unlink()
+                            self._print_debug("init",f"freed {self.lockfile} because "
+                                                + "of exceeding max_lock_time")
+                    except FileNotFoundError:
+                        # All is fine, the lockfile disappeared in the meanwhile.
+                        # Return to the while loop.
+                        pass
                 pass
 
             except FileNotFoundError:
