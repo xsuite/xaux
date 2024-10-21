@@ -228,24 +228,19 @@ class ProtectFile:
         self._access = False
         while True:
             try:
-                print('__init__ -> Try creating the lockfile')
                 self._create_lock(max_lock_time=max_lock_time)
                 # Success! Or is it....?
                 # We are in the lockfile, but there is still one potential concurrency,
                 # namely another process could have started creating the file while we
                 # did not see it having been created yet...
-                print('__init__ -> Creation of the lockfile OK')
                 self._flush_lock()
                 if not self._lock_is_ours():
-                    print('__init__ -> Lockfile not ours')
                     self._wait(wait)
                     continue
-                print('__init__ -> Lockfile ours')
                 self._print_debug("init", f"created {self.lockfile}")
                 break
 
             except OSError:
-                print(f'__init__ -> OSError: {self.lockfile.exists()=}')
                 # An error happen while trying to generate the Lockfile. This raise an 
                 # OSError: [Errno 5] Input/output error!
                 self._wait(wait)
@@ -269,7 +264,6 @@ class ProtectFile:
                             # gets to use the file; which is the intended behaviour
                             # (first one wins).
                             kill_lock = True
-                        print(f'__init__ -> OSError: {kill_lock=}')
                         if kill_lock:
                             self.lockfile.unlink()
                             self._print_debug("init",f"freed {self.lockfile} because "
@@ -315,7 +309,8 @@ class ProtectFile:
                     except FileNotFoundError:
                         # All is fine, the lockfile disappeared in the meanwhile.
                         # Return to the while loop.
-                        pass
+                        continue
+                continue
 
             except PermissionError:
                 # Special case: we can still access eos files when permission has expired, using `eos`
