@@ -10,7 +10,7 @@ import pytest
 from xaux.fs import *
 from xaux.fs.afs import _fs_installed
 
-from test_fs import _test_instantiation, _afs_test_path, _eos_test_path
+from test_fs import _test_instantiation, _afs_test_path, _eos_test_path, _test_user
 
 
 @pytest.mark.skipif(afs_accessible, reason="AFS is accessible.")
@@ -241,8 +241,10 @@ def test_afs_acl():
     acl = path.acl
     print(acl)
     assert isinstance(acl, dict)
-    assert "sixtadm" in acl
-    assert ''.join(sorted(acl["sixtadm"].lower())) == "adiklrw"
+#     assert "sixtadm" in acl
+#     assert ''.join(sorted(acl["sixtadm"].lower())) == "adiklrw"
+    assert _test_user in acl
+    assert ''.join(sorted(acl[_test_user].lower())) == "adiklrw"
     assert "testuser" not in acl
     path.acl = {"testuser": "rli"}
     acl = path.acl

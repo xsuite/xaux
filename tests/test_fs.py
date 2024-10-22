@@ -7,11 +7,12 @@ from pathlib import Path
 import os
 import pytest
 import numpy as np
+import getpass
 
 from xaux.fs import *
 from xaux.fs.afs import _fs_installed
 
-_test_user = "sixtadm"
+_test_user = getpass.getuser() #"sixtadm"
 
 _afs_test_path = f"/afs/cern.ch/user/{_test_user[0]}/{_test_user}/public/test_xboinc/"
 _eos_test_path = f"/eos/user/{_test_user[0]}/{_test_user}/test_xboinc/"
