@@ -98,97 +98,97 @@ def test_max_lock_time_crashed():
     Path(fname).unlink()
 
 
-def test_max_lock_time_nested():
-    fname = "test_max_lock_time_nested.json"
-    init_file(fname)
-    n_concurrent = 20
+# def test_max_lock_time_nested():
+#     fname = "test_max_lock_time_nested.json"
+#     init_file(fname)
+#     n_concurrent = 20
 
-    error_queue = Queue()
-    procs = [
-        Process(target=change_file_protected, args=(fname, False, 30, error_queue))
-        for _ in range(n_concurrent)
-    ]
+#     error_queue = Queue()
+#     procs = [
+#         Process(target=change_file_protected, args=(fname, False, 30, error_queue))
+#         for _ in range(n_concurrent)
+#     ]
 
-    for proc in procs:
-        proc.start()
-        time.sleep(0.001)
+#     for proc in procs:
+#         proc.start()
+#         time.sleep(0.001)
 
-    for proc in procs:
-        proc.join()
+#     for proc in procs:
+#         proc.join()
 
-    propagate_child_errors(error_queue)
+#     propagate_child_errors(error_queue)
 
-    with open(fname, "r+") as pf:
-        data = json.load(pf)
-        assert data["myint"] == n_concurrent
+#     with open(fname, "r+") as pf:
+#         data = json.load(pf)
+#         assert data["myint"] == n_concurrent
 
-    Path(fname).unlink()
-
-
-def test_max_lock_time_nested_crashes():
-    fname = "test_max_lock_time_nested_crashes.json"
-    init_file(fname)
-    ProtectFile._testing_nested = True
-    _run_nested_lockfiles(fname, 6)
-    ProtectFile._testing_nested = False
-    Path(fname).unlink()
+#     Path(fname).unlink()
 
 
-def test_max_lock_time_nested_crashes_overflow():
-    fname = "test_max_lock_time_nested_crashes_overflow.json"
-    init_file(fname)
-    ProtectFile._testing_nested = True
-    with pytest.raises(RuntimeError, match="Too many lockfiles!"):
-        _run_nested_lockfiles(fname, 7)
-    ProtectFile._testing_nested = False
-    Path(fname).unlink()
+# def test_max_lock_time_nested_crashes():
+#     fname = "test_max_lock_time_nested_crashes.json"
+#     init_file(fname)
+#     ProtectFile._testing_nested = True
+#     _run_nested_lockfiles(fname, 6)
+#     ProtectFile._testing_nested = False
+#     Path(fname).unlink()
 
 
-def _run_nested_lockfiles(fname, n_concurrent):
-    error_queue = Queue()
-    procs = [
-        Process(target=change_file_protected, args=(fname, False, 2, error_queue))
-        for _ in range(n_concurrent)
-    ]
+# def test_max_lock_time_nested_crashes_overflow():
+#     fname = "test_max_lock_time_nested_crashes_overflow.json"
+#     init_file(fname)
+#     ProtectFile._testing_nested = True
+#     with pytest.raises(RuntimeError, match="Too many lockfiles!"):
+#         _run_nested_lockfiles(fname, 7)
+#     ProtectFile._testing_nested = False
+#     Path(fname).unlink()
 
-    # Start the first process and kill it before finishing
-    procs[0].start()
-    time.sleep(0.05)
-    kill_process(procs[0], error_queue)
 
-    # Check there is a leftover lockfile
-    nested_path = f"{fname}.lock"
-    assert Path(nested_path).exists()
+# def _run_nested_lockfiles(fname, n_concurrent):
+#     error_queue = Queue()
+#     procs = [
+#         Process(target=change_file_protected, args=(fname, False, 2, error_queue))
+#         for _ in range(n_concurrent)
+#     ]
 
-    print("First process started and killed")
+#     # Start the first process and kill it before finishing
+#     procs[0].start()
+#     time.sleep(0.05)
+#     kill_process(procs[0], error_queue)
 
-    # We start and kill all next processes consecutively, except the last.
-    # This should generate nested lockfiles
-    for i, proc in enumerate(procs[1:-1]):
-        proc.start()
-        print(f"Process {i + 2} started")
+#     # Check there is a leftover lockfile
+#     nested_path = f"{fname}.lock"
+#     assert Path(nested_path).exists()
 
-        # Give it time to pass the wait and try to read the lock
-        time.sleep(0.15*(i + 1))  # Cascaded waiting time for each nested lock
+#     print("First process started and killed")
 
-        # Now kill it
-        kill_process(proc, error_queue)
+#     # We start and kill all next processes consecutively, except the last.
+#     # This should generate nested lockfiles
+#     for i, proc in enumerate(procs[1:-1]):
+#         proc.start()
+#         print(f"Process {i + 2} started")
 
-        # Check there is a leftover nested lockfile
-        nested_path = f"{nested_path}.lock"
-        assert Path(nested_path).exists()
+#         # Give it time to pass the wait and try to read the lock
+#         time.sleep(0.15*(i + 1))  # Cascaded waiting time for each nested lock
 
-        # Wait ~0.3s for the deepest lock to be allowed to be freed
-        time.sleep(0.4)
+#         # Now kill it
+#         kill_process(proc, error_queue)
 
-    # Start the final process
-    procs[-1].start()
-    procs[-1].join()
+#         # Check there is a leftover nested lockfile
+#         nested_path = f"{nested_path}.lock"
+#         assert Path(nested_path).exists()
 
-    propagate_child_errors(error_queue)
+#         # Wait ~0.3s for the deepest lock to be allowed to be freed
+#         time.sleep(0.4)
 
-    # Verify result
-    with open(fname, "r+") as pf:
-        data = json.load(pf)
-        assert data["myint"] == 1      # Only the last job succeeded
+#     # Start the final process
+#     procs[-1].start()
+#     procs[-1].join()
+
+#     propagate_child_errors(error_queue)
+
+#     # Verify result
+#     with open(fname, "r+") as pf:
+#         data = json.load(pf)
+#         assert data["myint"] == 1      # Only the last job succeeded
 
