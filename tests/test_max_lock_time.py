@@ -19,11 +19,11 @@ def test_max_lock_time():
     init_file(fname)
 
     error_queue = Queue()
-    procA = Process(target=change_file_protected, args=(fname, 1.5, error_queue, 0.35, 0.2))
-    procB = Process(target=change_file_protected, args=(fname, 1.5, error_queue, 0.35, 0.2))
+    procA = Process(target=change_file_protected, args=(fname, 1.5, error_queue, 0.45, 0.3))
+    procB = Process(target=change_file_protected, args=(fname, 1.5, error_queue, 0.45, 0.3))
 
     procA.start() # Lock takes 0.1s - 0.2s to create (due to flush) and job takes 0.2s to complete
-    time.sleep(0.50)
+    time.sleep(0.40)
     assert Path(lock_file).exists()
 
     # B will try to access the file while A is still running, and will try
@@ -32,7 +32,7 @@ def test_max_lock_time():
     procB.start()
 
     # A finished, B did not retry yet
-    time.sleep(0.31)
+    time.sleep(0.37)
     # WARNING: This assert is too hard! There is almost no windows between the removal of procA lock 
     #          and the new one being created from procB
     assert not Path(lock_file).exists()  # B did not retry yet
