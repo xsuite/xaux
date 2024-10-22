@@ -73,18 +73,21 @@ def test_max_lock_time_crashed():
     kill_process(procA, error_queue)
     assert Path(f"{fname}.lock").exists()
 
-    # After 6s (5s * 1.2) the lockfile is allowed to be force-freed.
-    # First we check that just before that, B was not able to alter the file:
-    time.sleep(6.1) # 6s max_lock_time + 0.2s rewrite time - 0.1s already waited
+    # After 7s (5s * 1.4) the lockfile is allowed to be force-freed.
+    # First we check that just before that (3s (5s * 0.6)), B was not able to alter the file:
+    time.sleep(3) # 3s max_lock_time
     with open(fname, "r") as pf:
         data = json.load(pf)
         assert data["myint"] == 0
+    
+    # Sleep for 0.2s, waiting for the release of the lock from B
+    time.sleep(4.1) # 7s max_lock_time + 0.2s rewrite time - 3.1s already waited
     procB.join()
 
     # Process B was able to complete its work directly after the max_lock_time
     stop = time.time()
     elapsed_time = stop - start
-    assert elapsed_time < 6.5
+    assert elapsed_time < 7.5
 
     propagate_child_errors(error_queue)
 
