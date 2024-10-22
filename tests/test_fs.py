@@ -11,9 +11,10 @@ import numpy as np
 from xaux.fs import *
 from xaux.fs.afs import _fs_installed
 
+_test_user = "sixtadm"
 
-_afs_test_path = "/afs/cern.ch/user/s/sixtadm/public/test_xboinc/"
-_eos_test_path = "/eos/user/s/sixtadm/test_xboinc/"
+_afs_test_path = f"/afs/cern.ch/user/{_test_user[0]}/{_test_user}/public/test_xboinc/"
+_eos_test_path = f"/eos/user/{_test_user[0]}/{_test_user}/test_xboinc/"
 
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
 def test_touch_and_symlinks_local():
