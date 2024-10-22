@@ -368,7 +368,7 @@ class ProtectFile:
 
     def _wait(self, wait):
         # Add some white noise to the wait time to avoid different processes syncing
-        if _testing:
+        if self._testing:
             this_wait = random.uniform(wait*0.8, wait*1.2)
         else:
             this_wait = random.uniform(wait*0.6, wait*1.4)
