@@ -565,7 +565,7 @@ class ProtectFile:
                 self._print_debug("release", f"unlink {self.lockfile}")
                 self.lockfile.unlink()
         # Remove file from the protected register
-        if pop:
+        if pop and hasattr(self, '_file'):
             protected_open.pop(self._file, 0)
 
 
