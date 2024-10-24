@@ -261,7 +261,7 @@ class ProtectFile:
                             continue
                         if self._testing:
                             # This is only for tests, to be able to kill the process
-                            time.sleep(1)
+                            time.sleep(0.01)
                         if 'free_after' in info and int(info['free_after']) > 0 \
                         and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
@@ -321,7 +321,7 @@ class ProtectFile:
                             continue
                         if self._testing:
                             # This is only for tests, to be able to kill the process
-                            time.sleep(1)
+                            time.sleep(0.01)
                         if 'free_after' in info and int(info['free_after']) > 0 \
                         and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
@@ -368,7 +368,7 @@ class ProtectFile:
     def _wait(self, wait):
         # Add some white noise to the wait time to avoid different processes syncing
         if self._testing:
-            this_wait = random.uniform(wait*0.9, wait*1.1)
+            this_wait = random.uniform(wait*0.95, wait*1.05)
         else:
             this_wait = random.uniform(wait*0.6, wait*1.4)
         self._print_debug("init", f"waiting {this_wait}s to create {self.lockfile}")
