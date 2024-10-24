@@ -27,7 +27,6 @@ def exit_handler():
     """This handles cleaning of potential leftover lockfiles."""
     for file in protected_open.values():
         file.release(pop=False)
-    _tempdir.cleanup()
 atexit.register(exit_handler)
 
 # This one should handle those exceptions.
@@ -369,7 +368,7 @@ class ProtectFile:
     def _wait(self, wait):
         # Add some white noise to the wait time to avoid different processes syncing
         if self._testing:
-            this_wait = random.uniform(wait*0.8, wait*1.2)
+            this_wait = random.uniform(wait*0.9, wait*1.1)
         else:
             this_wait = random.uniform(wait*0.6, wait*1.4)
         self._print_debug("init", f"waiting {this_wait}s to create {self.lockfile}")
