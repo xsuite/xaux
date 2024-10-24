@@ -7,14 +7,20 @@ from pathlib import Path
 import os
 import pytest
 import numpy as np
+import getpass
 
 from xaux.fs import *
 from xaux.fs.afs import _fs_installed
 
-_test_user = "sixtadm"
+_test_user = getpass.getuser() #"sixtadm"
 
 _afs_test_path = f"/afs/cern.ch/user/{_test_user[0]}/{_test_user}/public/test_xboinc/"
 _eos_test_path = f"/eos/user/{_test_user[0]}/{_test_user}/test_xboinc/"
+
+if not Path(_afs_test_path).exists():
+    raise FileNotFoundError(f'No such Directory essential for the test: {_afs_test_path}')
+if not Path(_eos_test_path).exists():
+    raise FileNotFoundError(f'No such Directory essential for the test: {_eos_test_path}')
 
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
 def test_touch_and_symlinks_local():

@@ -368,7 +368,10 @@ class ProtectFile:
 
     def _wait(self, wait):
         # Add some white noise to the wait time to avoid different processes syncing
-        this_wait = random.uniform(wait*0.6, wait*1.4)
+        if self._testing:
+            this_wait = random.uniform(wait*0.8, wait*1.2)
+        else:
+            this_wait = random.uniform(wait*0.6, wait*1.4)
         self._print_debug("init", f"waiting {this_wait}s to create {self.lockfile}")
         time.sleep(this_wait)
 
@@ -562,7 +565,7 @@ class ProtectFile:
                 self._print_debug("release", f"unlink {self.lockfile}")
                 self.lockfile.unlink()
         # Remove file from the protected register
-        if pop:
+        if pop and hasattr(self, '_file'):
             protected_open.pop(self._file, 0)
 
 
