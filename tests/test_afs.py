@@ -14,10 +14,11 @@ from test_fs import _test_instantiation, _afs_test_path, _eos_test_path, _test_u
 
 
 @pytest.mark.skipif(afs_accessible, reason="AFS is accessible.")
-def test_touch_and_symlinks_afs_no_access():
-    file = (Path(_afs_test_path) / "example_file.txt").as_posix()
-    link = (Path(_afs_test_path) / "example_link.txt").as_posix()
-    broken_link = (Path(_afs_test_path) / "example_broken_link.txt").as_posix()
+def test_touch_and_symlinks_afs_no_access(test_user):
+    afs_path = _afs_test_path(test_user, skip=False)
+    file = (Path(afs_path) / "example_file.txt").as_posix()
+    link = (Path(afs_path) / "example_link.txt").as_posix()
+    broken_link = (Path(afs_path) / "example_broken_link.txt").as_posix()
     # Create and test with FsPath
     path_file = FsPath(file)
     path_link = FsPath(link)
@@ -34,10 +35,10 @@ def test_touch_and_symlinks_afs_no_access():
 
 
 @pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
-def test_touch_and_symlinks_afs_access():
-    file = (Path(_afs_test_path) / "example_file.txt").as_posix()
-    link = (Path(_afs_test_path) / "example_link.txt").as_posix()
-    broken_link = (Path(_afs_test_path) / "example_broken_link.txt").as_posix()
+def test_touch_and_symlinks_afs_access(test_user):
+    file = (Path(_afs_test_path(test_user)) / "example_file.txt").as_posix()
+    link = (Path(_afs_test_path(test_user)) / "example_link.txt").as_posix()
+    broken_link = (Path(_afs_test_path(test_user)) / "example_broken_link.txt").as_posix()
     # Create and test with FsPath
     path_file = FsPath(file)
     path_link = FsPath(link)
@@ -75,10 +76,10 @@ def test_touch_and_symlinks_afs_access():
 
 
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
-def test_instantiation_afs():
+def test_instantiation_afs(test_user):
     AfsSystemPath    = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
     AfsNonSystemPath = AfsPosixPath   if os.name == 'nt' else AfsWindowsPath
-    file_abs = (Path(_afs_test_path) / "example_afs_file.txt").as_posix()
+    file_abs = (Path(_afs_test_path(test_user)) / "example_afs_file.txt").as_posix()
     if afs_accessible and Path(file_abs).exists():
         Path(file_abs).unlink()
     this_path = AfsSystemPath(file_abs)
@@ -89,20 +90,20 @@ def test_instantiation_afs():
     with pytest.raises(ValueError, match="The path is not on AFS."):
         AfsPath("example_local_file.txt")
     with pytest.raises(ValueError, match="The path is not on AFS."):
-        AfsPath(_eos_test_path)
+        AfsPath(_eos_test_path(test_user))
 
 
 @pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
-def test_instantiation_afs_access():
+def test_instantiation_afs_access(test_user):
     AfsSystemPath    = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
     AfsNonSystemPath = AfsPosixPath   if os.name == 'nt' else AfsWindowsPath
     LocalSystemPath    = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
     LocalNonSystemPath = LocalPosixPath   if os.name == 'nt' else LocalWindowsPath
     _file_rel = "example_afs_file.txt"
     _link_rel = "example_afs_relative_link.txt"
-    file_abs = (Path(_afs_test_path) / _file_rel).as_posix()
-    rel_link = (Path(_afs_test_path) / _link_rel).as_posix() # on AFS, will point (relative) to _file_rel
+    file_abs = (Path(_afs_test_path(test_user)) / _file_rel).as_posix()
+    rel_link = (Path(_afs_test_path(test_user)) / _link_rel).as_posix() # on AFS, will point (relative) to _file_rel
     abs_link = "example_afs_absolute_link.txt"               # on local, will point (absolute) to file_abs
     fs_link = "afs_test"                                     # on local, will point to absolute AFS folder
     file_fs = (Path(fs_link) / _file_rel).as_posix()         # on local linked folder, equal to file_abs
@@ -159,7 +160,7 @@ def test_instantiation_afs_access():
     # Create local link to AFS folder
     print(f"Testing AfsPath with {fs_link} (local link to AFS folder)...")
     path_fs_link = FsPath(fs_link)
-    path_fs_link.symlink_to(FsPath(_afs_test_path))
+    path_fs_link.symlink_to(FsPath(_afs_test_path(test_user)))
     assert isinstance(path_fs_link, LocalPath)
     assert path_fs_link.exists()
     assert path_fs_link.is_symlink()
@@ -236,15 +237,15 @@ def test_instantiation_afs_access():
 
 
 @pytest.mark.skipif(not _fs_installed, reason="The `fs` command is not installed.")
-def test_afs_acl():
-    path = FsPath(_afs_test_path)
+def test_afs_acl(test_user):
+    path = FsPath(_afs_test_path(test_user))
     acl = path.acl
     print(acl)
     assert isinstance(acl, dict)
 #     assert "sixtadm" in acl
 #     assert ''.join(sorted(acl["sixtadm"].lower())) == "adiklrw"
-    assert _test_user in acl
-    assert ''.join(sorted(acl[_test_user].lower())) == "adiklrw"
+    assert _test_user(test_user) in acl
+    assert ''.join(sorted(acl[_test_user(test_user)].lower())) == "adiklrw"
     assert "testuser" not in acl
     path.acl = {"testuser": "rli"}
     acl = path.acl

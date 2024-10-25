@@ -7,26 +7,26 @@ from pathlib import Path
 import os
 import pytest
 import numpy as np
-import getpass
 
 from xaux.fs import *
 from xaux.fs.afs import _fs_installed
 
-_test_user = getpass.getuser() #"sixtadm"
 
-_afs_test_path = f"/afs/cern.ch/user/{_test_user[0]}/{_test_user}/public/test_xboinc/"
-_eos_test_path = f"/eos/user/{_test_user[0]}/{_test_user}/test_xboinc/"
+def _test_user(test_user):
+    if test_user['skip_afs']:
+        pytest.skip("AFS test directory is not accessible.")
+    return test_user['test_user']
 
+def _afs_test_path(test_user, skip=True):
+    if test_user['skip_afs'] and skip:
+        pytest.skip("AFS test directory is not accessible.")
+    return test_user['afs_path']
 
-@pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
-def test_afs_userspace_accessible():
-    if not Path(_afs_test_path).exists():
-        raise FileNotFoundError(f'No such Directory essential for the test: {_afs_test_path}')
+def _eos_test_path(test_user, skip=True):
+    if test_user['skip_eos'] and skip:
+        pytest.skip("EOS test directory is not accessible.")
+    return test_user['eos_path']
 
-@pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
-def test_eos_userspace_accessible():
-    if not Path(_eos_test_path).exists():
-        raise FileNotFoundError(f'No such Directory essential for the test: {_eos_test_path}')
 
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
 def test_touch_and_symlinks_local():
@@ -155,27 +155,27 @@ def test_instantiation_local():
 @pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
 @pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
-def test_nested_fs():
-    level1     = FsPath(_afs_test_path) / "level1"
+def test_nested_fs(test_user):
+    level1     = FsPath(_afs_test_path(test_user)) / "level1"
     level1_res = FsPath.cwd() / "level1"
     level1_res.mkdir(exist_ok=True)
     if level1.lexists():
         level1.unlink()
     level1.symlink_to(level1_res)
     level2     = level1_res / "level2"
-    level2_res = FsPath(_eos_test_path) / "level2_res"
+    level2_res = FsPath(_eos_test_path(test_user)) / "level2_res"
     level2_res.mkdir(exist_ok=True)
     if level2.lexists():
         level2.unlink()
     level2.symlink_to(level2_res)
     level3     = level2_res / "level3"
-    level3_res = FsPath(_afs_test_path) / "level3_res"
+    level3_res = FsPath(_afs_test_path(test_user)) / "level3_res"
     level3_res.mkdir(exist_ok=True)
     if level3.lexists():
         level3.unlink()
     level3.symlink_to(level3_res)
     level4     = level3_res / "level4"
-    level4_res = FsPath(_eos_test_path) / "level4_res"
+    level4_res = FsPath(_eos_test_path(test_user)) / "level4_res"
     level4_res.mkdir(exist_ok=True)
     if level4.lexists():
         level4.unlink()
@@ -187,7 +187,7 @@ def test_nested_fs():
         level5.unlink()
     level5.symlink_to(level5_res)
     level6     = level5_res / "level6"
-    level6_res = FsPath(_afs_test_path) / "level6_res"
+    level6_res = FsPath(_afs_test_path(test_user)) / "level6_res"
     level6_res.mkdir(exist_ok=True)
     if level6.lexists():
         level6.unlink()

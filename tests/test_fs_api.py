@@ -35,7 +35,7 @@ def test_fs_methods():
     assert size_expand('4t', binary=True) == 4398046511104
 
 
-def test_fspath_methods():
+def test_fspath_methods(test_user):
     # Test truediv
     new_path = FsPath('/afs/cern.ch') / FsPath('tripco.txt')
     print(repr(new_path))
@@ -47,7 +47,7 @@ def test_fspath_methods():
         path_afs_link = FsPath("~/afs_test").expanduser()
         if path_afs_link.lexists():
             path_afs_link.unlink()
-        path_afs_link.symlink_to(FsPath(_afs_test_path))
+        path_afs_link.symlink_to(FsPath(_afs_test_path(test_user)))
         test = FsPath("~/afs_test/default_file.txt").expanduser()
         assert isinstance(test, AfsPath)
         test = FsPath.home() / "afs_test" / "default_file.txt"
@@ -57,7 +57,7 @@ def test_fspath_methods():
         path_eos_link = FsPath("~/eos_test").expanduser()
         if path_eos_link.lexists():
             path_eos_link.unlink()
-        path_eos_link.symlink_to(FsPath(_eos_test_path))
+        path_eos_link.symlink_to(FsPath(_eos_test_path(test_user)))
         test = FsPath("~/eos_test/default_file.txt").expanduser()
         assert isinstance(test, EosPath)
         test = FsPath.home() / "eos_test" / "default_file.txt"
@@ -67,7 +67,7 @@ def test_fspath_methods():
 
 @pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
 @pytest.mark.parametrize("afs_cmd", [0, 1], ids=["xrdcp", "mount"])
-def test_file_io_afs(afs_cmd):
+def test_file_io_afs(afs_cmd, test_user):
     xaux.fs._force_xrdcp = False
     xaux.fs._skip_afs_software = False
     xaux.fs._skip_eos_software = False
@@ -84,7 +84,7 @@ def test_file_io_afs(afs_cmd):
     path_afs_link = FsPath("~/afs_test").expanduser()
     if path_afs_link.lexists():
         path_afs_link.unlink()
-    path_afs_link.symlink_to(FsPath(_afs_test_path))
+    path_afs_link.symlink_to(FsPath(_afs_test_path(test_user)))
 
     # Copy one file
     local_file_1 = FsPath("default_file_1.txt")
@@ -224,7 +224,7 @@ def test_file_io_afs(afs_cmd):
 
 @pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
 @pytest.mark.parametrize("eos_cmd", [0, 1, 2], ids=["xrdcp", "eos", "mount"])
-def test_file_io_eos(eos_cmd):
+def test_file_io_eos(eos_cmd, test_user):
     xaux.fs._force_xrdcp = False
     xaux.fs._force_eoscmd = False
     xaux.fs._skip_eos_software = False
@@ -246,7 +246,7 @@ def test_file_io_eos(eos_cmd):
     path_eos_link = FsPath("~/eos_test").expanduser()
     if path_eos_link.lexists():
         path_eos_link.unlink()
-    path_eos_link.symlink_to(FsPath(_eos_test_path))
+    path_eos_link.symlink_to(FsPath(_eos_test_path(test_user)))
 
     # Copy one file
     local_file_1 = FsPath("default_file_1.txt")

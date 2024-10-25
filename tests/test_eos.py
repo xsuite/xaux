@@ -14,10 +14,11 @@ from test_fs import _test_instantiation, _afs_test_path, _eos_test_path
 
 
 @pytest.mark.skipif(eos_accessible, reason="EOS is accessible.")
-def test_touch_and_symlinks_eos_no_access():
-    file = (Path(_eos_test_path) / "example_file.txt").as_posix()
-    link = (Path(_eos_test_path) / "example_link.txt").as_posix()
-    broken_link = (Path(_eos_test_path) / "example_broken_link.txt").as_posix()
+def test_touch_and_symlinks_eos_no_access(test_user):
+    eos_path = _eos_test_path(test_user, skip=False)
+    file = (Path(eos_path) / "example_file.txt").as_posix()
+    link = (Path(eos_path) / "example_link.txt").as_posix()
+    broken_link = (Path(eos_path) / "example_broken_link.txt").as_posix()
     # Create and test with FsPath
     path_file = FsPath(file)
     path_link = FsPath(link)
@@ -34,10 +35,10 @@ def test_touch_and_symlinks_eos_no_access():
 
 
 @pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
-def test_touch_and_symlinks_eos_access():
-    file = (Path(_eos_test_path) / "example_file.txt").as_posix()
-    link = (Path(_eos_test_path) / "example_link.txt").as_posix()
-    broken_link = (Path(_eos_test_path) / "example_broken_link.txt").as_posix()
+def test_touch_and_symlinks_eos_access(test_user):
+    file = (Path(_eos_test_path(test_user)) / "example_file.txt").as_posix()
+    link = (Path(_eos_test_path(test_user)) / "example_link.txt").as_posix()
+    broken_link = (Path(_eos_test_path(test_user)) / "example_broken_link.txt").as_posix()
     # Create and test with FsPath
     path_file = FsPath(file)
     path_link = FsPath(link)
@@ -70,10 +71,10 @@ def test_touch_and_symlinks_eos_access():
 
 
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
-def test_instantiation_eos():
+def test_instantiation_eos(test_user):
     EosSystemPath    = EosWindowsPath if os.name == 'nt' else EosPosixPath
     EosNonSystemPath = EosPosixPath   if os.name == 'nt' else EosWindowsPath
-    file_abs = (Path(_eos_test_path) / "example_eos_file.txt").as_posix()
+    file_abs = (Path(_eos_test_path(test_user)) / "example_eos_file.txt").as_posix()
     if eos_accessible and Path(file_abs).exists():
         Path(file_abs).unlink()
     this_path = EosSystemPath(file_abs)
@@ -84,18 +85,18 @@ def test_instantiation_eos():
     with pytest.raises(ValueError, match="The path is not on EOS."):
         EosPath("example_local_file.txt")
     with pytest.raises(ValueError, match="The path is not on EOS."):
-        EosPath(_afs_test_path)
+        EosPath(_afs_test_path(test_user))
 
 
 @pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
-def test_instantiation_eos_access():
+def test_instantiation_eos_access(test_user):
     EosSystemPath    = EosWindowsPath if os.name == 'nt' else EosPosixPath
     EosNonSystemPath = EosPosixPath   if os.name == 'nt' else EosWindowsPath
     _file_rel = "example_eos_file.txt"
     _link_rel = "example_eos_relative_link.txt"
-    file_abs = (Path(_eos_test_path) / _file_rel).as_posix()
-    rel_link = (Path(_eos_test_path) / _link_rel).as_posix() # on EOS, will point (relative) to _file_rel
+    file_abs = (Path(_eos_test_path(test_user)) / _file_rel).as_posix()
+    rel_link = (Path(_eos_test_path(test_user)) / _link_rel).as_posix() # on EOS, will point (relative) to _file_rel
     abs_link = "example_eos_absolute_link.txt"        # on local, will point (absolute) to file_abs
     fs_link = "eos_test"                              # on local, will point to absolute EOS folder
     file_fs = (Path(fs_link) / _file_rel).as_posix()  # on local linked folder, equal to file_abs
@@ -151,7 +152,7 @@ def test_instantiation_eos_access():
     # Create local link to EOS folder
     print(f"Testing EosPath with {fs_link} (local link to EOS folder)...")
     path_fs_link = FsPath(fs_link)
-    path_fs_link.symlink_to(FsPath(_eos_test_path))
+    path_fs_link.symlink_to(FsPath(_eos_test_path(test_user)))
     assert isinstance(path_fs_link, LocalPath)
     assert path_fs_link.exists()
     assert path_fs_link.is_symlink()
@@ -228,9 +229,9 @@ def test_instantiation_eos_access():
 
 
 @pytest.mark.skipif(EOS_CELL != "cern.ch", reason="This test is only valid for the CERN EOS instance.")
-def test_eos_components():
+def test_eos_components(test_user):
     _file_rel = "example_eos_file_components.txt"
-    file_ref = (Path(_eos_test_path) / _file_rel).as_posix()
+    file_ref = (Path(_eos_test_path(test_user)) / _file_rel).as_posix()
     this_path = EosPath(file_ref)
     assert isinstance(this_path, EosPath)
     files = [file_ref]
