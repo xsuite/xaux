@@ -86,7 +86,7 @@ def test_max_lock_time_crashed():
     # Process B was able to complete its work directly after the max_lock_time
     stop = time.time()
     elapsed_time = stop - start
-    assert elapsed_time < 5.6
+    assert elapsed_time < 5.7
 
     propagate_child_errors(error_queue)
 

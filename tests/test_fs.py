@@ -17,10 +17,16 @@ _test_user = getpass.getuser() #"sixtadm"
 _afs_test_path = f"/afs/cern.ch/user/{_test_user[0]}/{_test_user}/public/test_xboinc/"
 _eos_test_path = f"/eos/user/{_test_user[0]}/{_test_user}/test_xboinc/"
 
-if not Path(_afs_test_path).exists():
-    raise FileNotFoundError(f'No such Directory essential for the test: {_afs_test_path}')
-if not Path(_eos_test_path).exists():
-    raise FileNotFoundError(f'No such Directory essential for the test: {_eos_test_path}')
+
+@pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
+def test_afs_userspace_accessible():
+    if not Path(_afs_test_path).exists():
+        raise FileNotFoundError(f'No such Directory essential for the test: {_afs_test_path}')
+
+@pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
+def test_eos_userspace_accessible():
+    if not Path(_eos_test_path).exists():
+        raise FileNotFoundError(f'No such Directory essential for the test: {_eos_test_path}')
 
 @pytest.mark.skipif(not isinstance(FsPath.cwd(), LocalPath), reason="This test should be ran from a local path.")
 def test_touch_and_symlinks_local():
@@ -144,6 +150,7 @@ def test_instantiation_local():
     # Clean-up
     for f in [file, rel_link, abs_link]:
         FsPath(f).unlink()
+
 
 @pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
 @pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
