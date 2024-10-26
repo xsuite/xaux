@@ -11,8 +11,8 @@ import signal
 
 from xaux import ProtectFile, FsPath
 
-
 ProtectFile._debug = True
+ProtectFile._testing = True
 
 
 def rewrite(pf, runtime=0.2):
@@ -24,10 +24,22 @@ def rewrite(pf, runtime=0.2):
     pf.truncate()
 
 
-def change_file_protected(fname, max_lock_time=None, error_queue=None, wait=0.1, runtime=0.2):
+def change_file_protected(fname, max_lock_time=None, error_queue=None, wait=0.1, runtime=0.2, job_id=None):
     try:
+        if job_id:
+            t0 = time.time()
+            print(f"Job {job_id} started  (stamp {t0})", flush=True)
         with ProtectFile(fname, "r+", wait=wait, max_lock_time=max_lock_time) as pf:
+            if job_id:
+                t1 = time.time()
+                print(f"Job {job_id} in protectfile (init duration: {int(1e3*(t1 - t0))}ms)", flush=True)
             rewrite(pf, runtime)
+            if job_id:
+                t2 = time.time()
+                print(f"Job {job_id} finished process in protectfile (process duration: {int(1e3*(t2 - t1))}ms)", flush=True)
+        if job_id:
+            t3 = time.time()
+            print(f"Job {job_id} done (total duration: {int(1e3*(t3-t0))}ms, exit duration {int(1e3*(t3-t2))}ms, stamp {t2})", flush=True)
     except Exception as e:
         if error_queue is None:
             raise e
@@ -46,9 +58,16 @@ def init_file(fname):
     # Remove leftover lockfiles
     for f in FsPath.cwd().glob(f"{fname}.lock*"):
         f.unlink()
+
     # Initialise file
-    with ProtectFile(fname, "w", wait=1) as pf:
+    t_prev = time.time()
+    with ProtectFile(fname, "w", wait=0.1) as pf:
+        init_time = time.time() - t_prev
         json.dump({"myint": 0}, pf, indent=4)
+        dump_time = time.time() - t_prev - init_time
+    exit_time = time.time() - t_prev - init_time - dump_time
+
+    return init_time, dump_time, exit_time  # These are the times taken by the ProtectFile process
 
 
 def propagate_child_errors(error_queue):

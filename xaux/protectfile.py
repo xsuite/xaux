@@ -223,6 +223,9 @@ class ProtectFile:
                 + "and a file is freed while the original process is "
                 + "still running, file corruption might occur. Are you "
                 + "sure this is what you want?")
+        if max_lock_time and max_lock_time < 2:
+            print("Warning: `max_lock_time` is too short. Put to 2.")
+            max_lock_time = 2
 
         # Time to wait between trials to generate lockfile
         wait = arg.pop('wait', 1)
@@ -236,7 +239,7 @@ class ProtectFile:
                 # We are in the lockfile, but there is still one potential concurrency,
                 # namely another process could have started creating the file while we
                 # did not see it having been created yet...
-                self._flush_lock()
+                self._flush_lock(wait=1e-3*wait)
                 if not self._lock_is_ours():
                     self._wait(wait)
                     continue
@@ -259,9 +262,6 @@ class ProtectFile:
                                 info = json.load(fid)
                         except:
                             continue
-                        if self._testing:
-                            # This is only for tests, to be able to kill the process
-                            time.sleep(0.01)
                         if 'free_after' in info and int(info['free_after']) > 0 \
                         and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
@@ -294,7 +294,7 @@ class ProtectFile:
                             local_lockfile.unlink()
                         self._create_lock(local_lockfile, max_lock_time, local=True)
                         self._print_debug("init", f"created local {local_lockfile}")
-                        self._flush_lock(local_lockfile)
+                        self._flush_lock(local_lockfile, wait=1e-3*wait)
                         if not self._lock_is_ours(local_lockfile):
                             self._wait(wait)
                             continue
@@ -307,7 +307,7 @@ class ProtectFile:
                     raise PermissionError(f"Cannot access {self.lockfile}; permission denied.")
 
             except OSError:
-                # An error happen while trying to generate the Lockfile. This raise an
+                # An error happened while trying to generate the Lockfile. This raised an
                 # OSError: [Errno 5] Input/output error!
                 self._wait(wait)
                 if self.lockfile.exists():
@@ -319,9 +319,6 @@ class ProtectFile:
                                 info = json.load(fid)
                         except:
                             continue
-                        if self._testing:
-                            # This is only for tests, to be able to kill the process
-                            time.sleep(0.01)
                         if 'free_after' in info and int(info['free_after']) > 0 \
                         and int(info['free_after']) < time.time():
                             # We free the original process by deleting the lockfile
@@ -349,7 +346,7 @@ class ProtectFile:
             self._size = self.file.size()
             self._hash = get_hash(self.file)
 
-        # Force an update from the file system
+        # Force an update from the file system (a bit slow ~100ms, but necessary)
         self._file.flush()
 
         # Choose file pointer:
@@ -368,7 +365,7 @@ class ProtectFile:
     def _wait(self, wait):
         # Add some white noise to the wait time to avoid different processes syncing
         if self._testing:
-            this_wait = random.uniform(wait*0.95, wait*1.05)
+            this_wait = random.uniform(wait*0.999, wait*1.001)
         else:
             this_wait = random.uniform(wait*0.6, wait*1.4)
         self._print_debug("init", f"waiting {this_wait}s to create {self.lockfile}")
@@ -376,12 +373,13 @@ class ProtectFile:
 
 
     def _create_lock(self, lockfile=None, max_lock_time=None):
-        self.lockfile.getfid() # Look up the file on the server
+        self.lockfile.getfid() # Look up the file on the server (takes a few ms)
         if lockfile is None:
             lockfile = self.lockfile
         free_after = -1
         if max_lock_time is not None:
             free_after = int(time.time() + max_lock_time)
+            free_after = f"{free_after:15d}"[:15]
         # We ensure that the variables in the lockfile always have a fixed number of characters
         ran = random.randint(0, 2**63 - 1) + os.getpid() + int(time.time_ns() % 1e9)
         self._ran = f"{ran:0>20d}"
@@ -390,18 +388,24 @@ class ProtectFile:
             json.dump({
                 'ran':     self._ran,
                 'machine': self._machine,
-                'free_after': f"{free_after:15d}"[:15]
+                'free_after': free_after
             }, flock)
+        self._print_debug("init", f"Trying lockfile with metadata {free_after=} ran={self._ran} machine={self._machine}")
 
 
-    def _flush_lock(self, local_lockfile=None):
+    def _flush_lock(self, local_lockfile=None, wait=0.01):
         if local_lockfile:
             # Move it to the server lockfile
             local_lockfile.move_to(self.lockfile)  # can use specialised server commands
             assert not local_lockfile.is_file()    # sanity check
-        # Flush the file on the server
+        # Flush the file on the server (a bit slow ~100ms, but necessary)
         self.lockfile.flush()
-        time.sleep(random.uniform(0.1, 0.2))
+        if self._testing:
+            this_wait = random.uniform(0.099, 0.101)
+        else:
+            this_wait = 0.001 + random.uniform(wait*0.6, wait*1.4)
+        self._print_debug("init", f"flushing lock and waiting {this_wait}s to ensure sync")
+        time.sleep(this_wait)
         if local_lockfile:
             # Move it to the server lockfile
             self.lockfile.copy_to(local_lockfile)  # can use specialised server commands
@@ -570,7 +574,7 @@ class ProtectFile:
 
     def _print_debug(self, prc, msg):
         if self._debug:
-            print(f"({self._file.name}) {prc}: {msg}\n")
+            print(f"({self._file.name}) {prc}: {msg}")
 
 
 class ProtectFileError(Exception):
