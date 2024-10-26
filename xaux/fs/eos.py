@@ -120,9 +120,10 @@ class EosPath(FsPath, Path):
             super().__init__()
 
     def _set_eos_path(self, _eos_instance=None):
-        parts = _non_strict_resolve(self.expanduser().parent, _as_posix=True).split('/')
-        if len(parts) == 2:
-            parts = _non_strict_resolve(self.expanduser(), _as_posix=True).split('/')
+        with self.__class__._in_constructor():
+            parts = _non_strict_resolve(self.expanduser().parent, _as_posix=True).split('/')
+            if len(parts) == 2:
+                parts = _non_strict_resolve(self.expanduser(), _as_posix=True).split('/')
         instance_parts = parts[2].split('-')
         eos_instance = _parse_instance(instance_parts[0])
         if _eos_instance is not None and eos_instance != _eos_instance:
