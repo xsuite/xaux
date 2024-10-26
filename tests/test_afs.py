@@ -79,7 +79,7 @@ def test_touch_and_symlinks_afs_access(test_user):
 def test_instantiation_afs(test_user):
     AfsSystemPath    = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
     AfsNonSystemPath = AfsPosixPath   if os.name == 'nt' else AfsWindowsPath
-    file_abs = (Path(_afs_test_path(test_user)) / "example_afs_file.txt").as_posix()
+    file_abs = (Path(_afs_test_path(test_user, skip=False)) / "example_afs_file.txt").as_posix()
     if afs_accessible and Path(file_abs).exists():
         Path(file_abs).unlink()
     this_path = AfsSystemPath(file_abs)
@@ -90,7 +90,7 @@ def test_instantiation_afs(test_user):
     with pytest.raises(ValueError, match="The path is not on AFS."):
         AfsPath("example_local_file.txt")
     with pytest.raises(ValueError, match="The path is not on AFS."):
-        AfsPath(_eos_test_path(test_user))
+        AfsPath(_eos_test_path(test_user, skip=False))
 
 
 @pytest.mark.skipif(not afs_accessible, reason="AFS is not accessible.")
@@ -242,8 +242,6 @@ def test_afs_acl(test_user):
     acl = path.acl
     print(acl)
     assert isinstance(acl, dict)
-#     assert "sixtadm" in acl
-#     assert ''.join(sorted(acl["sixtadm"].lower())) == "adiklrw"
     assert _test_user(test_user) in acl
     assert ''.join(sorted(acl[_test_user(test_user)].lower())) == "adiklrw"
     assert "testuser" not in acl

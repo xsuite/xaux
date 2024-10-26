@@ -74,7 +74,7 @@ def test_touch_and_symlinks_eos_access(test_user):
 def test_instantiation_eos(test_user):
     EosSystemPath    = EosWindowsPath if os.name == 'nt' else EosPosixPath
     EosNonSystemPath = EosPosixPath   if os.name == 'nt' else EosWindowsPath
-    file_abs = (Path(_eos_test_path(test_user)) / "example_eos_file.txt").as_posix()
+    file_abs = (Path(_eos_test_path(test_user, skip=False)) / "example_eos_file.txt").as_posix()
     if eos_accessible and Path(file_abs).exists():
         Path(file_abs).unlink()
     this_path = EosSystemPath(file_abs)
@@ -85,7 +85,7 @@ def test_instantiation_eos(test_user):
     with pytest.raises(ValueError, match="The path is not on EOS."):
         EosPath("example_local_file.txt")
     with pytest.raises(ValueError, match="The path is not on EOS."):
-        EosPath(_afs_test_path(test_user))
+        EosPath(_afs_test_path(test_user, skip=False))
 
 
 @pytest.mark.skipif(not eos_accessible, reason="EOS is not accessible.")
@@ -231,7 +231,7 @@ def test_instantiation_eos_access(test_user):
 @pytest.mark.skipif(EOS_CELL != "cern.ch", reason="This test is only valid for the CERN EOS instance.")
 def test_eos_components(test_user):
     _file_rel = "example_eos_file_components.txt"
-    file_ref = (Path(_eos_test_path(test_user)) / _file_rel).as_posix()
+    file_ref = (Path(_eos_test_path(test_user, skip=False)) / _file_rel).as_posix()
     this_path = EosPath(file_ref)
     assert isinstance(this_path, EosPath)
     files = [file_ref]
