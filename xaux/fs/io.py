@@ -13,7 +13,7 @@ from .fs import FsPath
 from .afs import AfsPath, _afs_mounted
 from .eos import EosPath
 from .eos_methods import _eos_mounted, _xrdcp_installed, _eoscmd_installed, _eos_version, _eos_version_int
-# from ..tools import ranID
+
 
 # TODO:
 #   - xrdcp: increase efficiency by using a list of files
@@ -21,9 +21,29 @@ from .eos_methods import _eos_mounted, _xrdcp_installed, _eoscmd_installed, _eos
 #   - xrdcp: can we parallelize?
 #   - xrdcp and eos: implement follow_symlinks
 #   - test if symlinks behave correctly
+#   - EOS is very very slow
+
+
+# We want to mimic the bash commands as much as possible
+# cp file1 file2            file2 does not exist:         copies file1 into new file2
+# cp file1 file2            file2 does exist:             copies file1 into file2 (overwrites file2)
+# cp file1 file2 file3                                    error  "cp: target 'file3' is not a directory"
+# cp file1 link1            link points to other file:    copies file1 into link1 (overwrites the contents of the linked file without renaming it)
+# cp file1 link1            link points to file1:         error "cp: 'file1' and 'link1' are the same file"
+# cp file1 file2 link1                                    error  "cp: target 'file3' is not a directory"
+# cp file1 dir1                                           copies file1 into dir1 (potentially overwrites)
+# cp file1 file2 ... dir1                                 copies files into dir1 (potentially overwrites)
+# cp file1 file2 ... link1  link points to dir1:          copies files into dir1 (potentially overwrites)
+# cp dir1 file1                                           error  "cp: -r not specified; omitting directory 'dir1'"
+# cp -r dir1 file1                                        error  "cp: cannot overwrite non-directory 'file1' with directory 'dir1'"
+# cp -r dir1 dir2           dir2 does not exist:          copies dir1 into new dir2
+# cp -r dir1 dir2           dir2 does exist:              copies dir1 inside dir2
+# links are treated as the file/dir they point to, unless -P is specified, in which case (only for links as source argument) they are treated as separate files
+
 
 # If follow_symlinks=False, same as cp -P (hence a link is copied instead of its contents)
 def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
+    # print("COPY"); import time; t_start = time.time(); t_prev = t_start
     if len(args) < 2:
         return
     this_stdout = ""
@@ -31,21 +51,28 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
     args = [FsPath(arg).expanduser() for arg in args]
     target = args[-1].resolve()
     sources = args[:-1]
+    # t_new = time.time(); print(f"{target=}, {sources=}  ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
 
     # Renaming is only allowed if there is a single source
-    if not target.is_dir():
-        if len(sources) > 1:
+    if len(sources) > 1:
+        if not target.is_dir():
             raise OSError(f"cp: target '{target}' is not a directory")
 
     # Omitting directories if -r is not specified
     if not recursive:
+        new_sources = []
         for src in sources:
             if src.is_dir():
                 this_stdout += f"cp: -r not specified; omitting directory '{src}'"
-        sources = [src for src in sources if not src.is_dir()]
+            else:
+                new_sources.append(src)
+        sources = new_sources
 
     # Match target for each source and verify the syntax
+    # t_new = time.time(); print(f"Before loop ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
     sources_targets = _loop_sources_and_verify(sources, target)
+    # t_new = time.time(); print(f"After loop ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
+    # print(f"{sources_targets=}")
 
     # Files on EOS or AFS need a special treatment
     if isinstance(target, EosPath):
@@ -62,26 +89,34 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
         sources_targets     = [f for f in sources_targets if not isinstance(f[0], EosPath)
                                                          and not isinstance(f[0], AfsPath)]
 
+    # t_new = time.time(); print(f"Setup done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
     # Do the copy
     stdout, stderr = _cp_regular(sources_targets, follow_symlinks)
     this_stdout += stdout
     this_stderr += stderr
+    # t_new = time.time(); print(f"Regular done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
     stdout, stderr = _cp_afs(afs_sources_targets, follow_symlinks)
     this_stdout += stdout
     this_stderr += stderr
+    # t_new = time.time(); print(f"AFS done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
     stdout, stderr = _cp_eos(eos_sources_targets, follow_symlinks)
     this_stdout += stdout
     this_stderr += stderr
+    # t_new = time.time(); print(f"EOS done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
 
     # Raise an exception if some files could not be copied
     if this_stderr:
        raise OSError(this_stderr)
+    # print(f"COPY DONE  ({int(1e3*(time.time() - t_start))}ms)")
+    # print()
+    # print()
 
     return this_stdout
 
 
 # If follow_symlinks=False, same as cp -P (hence a link is copied instead of its contents)
 def mv(*args, follow_symlinks=True, **kwargs):
+    # print("MOVE"); import time; t_start = time.time()
     stdout = cp(*args, recursive=True, follow_symlinks=follow_symlinks, **kwargs)
     # If we got here, then the copy was successful
     for arg in args[:-1]:
@@ -89,6 +124,9 @@ def mv(*args, follow_symlinks=True, **kwargs):
             arg.rmtree()
         else:
             arg.unlink()
+    # print(f"MOVE DONE  ({int(1e3*(time.time() - t_start))}ms)")
+    # print()
+    # print()
     return stdout
 
 
@@ -404,52 +442,3 @@ def _cp_eoscmd(sources_targets):
     sources_targets = [f[-3:] for f in cmd_data if not f[-2].exists()]
 
     return sources_targets, stdout, stderr
-
-                # if _eoscmd_installed and not _force_xrdcp:
-                #     if rcrsv:
-                #         path_src = src.eos_path if isinstance(src, EosPath) else src.as_posix()
-                #         path_target = target.eos_path if isinstance(target, EosPath) else target.as_posix()
-                #         if path_src.is_dir() and path_src[-1] != '/':
-                #             path_src = path_src + '/'
-                #         if path_target.is_dir() and path_target[-1] != '/':
-                #             path_target = path_target + '/'
-                #     opts = [] # --silent
-                #     cmds = ['eos', 'cp', *r, *opts, path_src, path_target]
-                #     cmd_mess = ' '.join(cmds)
-                #     if rcrsv and _eos_version_int < 5002021:
-                #         stderr += f"Failed {cmd_mess}.\n"
-                #         stderr += f"The command `eos cp -r` is not supported on versions below {_eos_version}."
-                #     else:
-                #         failed = False
-                #         try:
-                #             if rcrsv:
-                #                 if isinstance(this_target, EosPath):
-                #                     mgm = this_target.mgm
-                #                 else:
-                #                     mgm = src.mgm
-                #                 eos_env = {**os.environ, 'EOS_MGM_URL': mgm}
-                #                 cmd = run(cmds, stdout=PIPE, stderr=PIPE, env=eos_env)
-                #             else:
-                #                 cmd = run(cmds, stdout=PIPE, stderr=PIPE)
-                #             if cmd.returncode == 0:
-                #                 stdout += cmd.stdout.decode('UTF-8').strip()
-                #                 stdout += f"\nstderr: {cmd.stderr.decode('UTF-8').strip()}\n"
-                #                 if not (target / src.name).exists():
-                #                     failed = True
-                #                     stderr += f"Failed {cmd_mess}. Target/src does not exist.\n"
-                #                     stderr += cmd.stderr.decode('UTF-8').strip()
-                #                     stderr += f"\nstdout: {cmd.stdout.decode('UTF-8').strip()}\n"
-                #             else:
-                #                 failed = True
-                #                 stderr += f"Failed {cmd_mess}.\n"
-                #                 stderr += cmd.stderr.decode('UTF-8').strip()
-                #                 stderr += f"\nstdout: {cmd.stdout.decode('UTF-8').strip()}\n"
-                #         except Exception as e:
-                #             stderr += f"Failed {cmd_mess}.\n"
-                #             stderr += str(e) + '\n'
-                #         else:
-                #             if not failed:
-                #                 if stderr != "":
-                #                     warnings.warn(f"Previous try failed:\n{stderr=}", RuntimeWarning)
-                #                 continue
-
