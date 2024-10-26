@@ -111,14 +111,12 @@ def is_egroup_member(egroup, verbose=False):
 
 def _eos_exists(path, *args, **kwargs):
     _assert_eos_accessible("Cannot stat EOS paths.")
-    if path.is_dir():
+    try:
+        ftype, _ = _get_type(path, *args, **kwargs)
+    except FileNotFoundError:
+        return False
+    if ftype is not None:
         return True
-    success, result = _run_eos(['eos', 'ls', '-ah', path.eos_path], mgm=path.mgm,
-                        _false_if_stderr_contains='No such file or directory', **kwargs)
-    if success:
-        if not result:
-            return False
-        return result == path.name or result.endswith('/' + path.name)
     return Path(path.eos_path).exists(*args, **kwargs)
 
 

@@ -128,7 +128,7 @@ def test_file_io_afs(afs_cmd, test_user):
         target = FsPath(f"~/afs_test/default_file_{i}.txt").expanduser()
         if target.exists():
             target.unlink()
-    print(cp(*local_files, "~/afs_test/"))
+    cp(*local_files, "~/afs_test/")
     for i in range(1, 8):
         target = FsPath(f"~/afs_test/default_file_{i}.txt").expanduser()
         assert target.exists()
@@ -138,7 +138,7 @@ def test_file_io_afs(afs_cmd, test_user):
         assert file.exists()
 
     # Move several files
-    print(mv(*local_files, "~/afs_test/"))
+    mv(*local_files, "~/afs_test/")
     for i in range(1, 8):
         target = FsPath(f"~/afs_test/default_file_{i}.txt").expanduser()
         assert target.exists()
@@ -170,7 +170,7 @@ def test_file_io_afs(afs_cmd, test_user):
     for file in local_files:
         file.touch()
         assert file.exists()
-    print(mv(*local_files, "~/afs_test/Blibo/"))
+    mv(*local_files, "~/afs_test/Blibo/")
     for file in local_files:
         assert not file.exists()
     for i in range(1, 8):
@@ -290,7 +290,7 @@ def test_file_io_eos(eos_cmd, test_user):
         target = FsPath(f"~/eos_test/default_file_{i}.txt").expanduser()
         if target.exists():
             target.unlink()
-    print(cp(*local_files, "~/eos_test/"))
+    cp(*local_files, "~/eos_test/")
     for i in range(1, 8):
         target = FsPath(f"~/eos_test/default_file_{i}.txt")
         assert target.exists()
@@ -300,7 +300,7 @@ def test_file_io_eos(eos_cmd, test_user):
         assert file.exists()
 
     # Move several files
-    print(mv(*local_files, "~/eos_test/"))
+    mv(*local_files, "~/eos_test/")
     for i in range(1, 8):
         target = FsPath(f"~/eos_test/default_file_{i}.txt").expanduser()
         assert target.exists()
@@ -332,7 +332,7 @@ def test_file_io_eos(eos_cmd, test_user):
     for file in local_files:
         file.touch()
         assert file.exists()
-    print(mv(*local_files, "~/eos_test/Blibo/"))
+    mv(*local_files, "~/eos_test/Blibo/")
     for file in local_files:
         assert not file.exists()
     for i in range(1, 8):
@@ -385,5 +385,3 @@ def test_file_io_eos(eos_cmd, test_user):
     xaux.fs._force_xrdcp = False
     xaux.fs._force_eoscmd = False
     xaux.fs._skip_eos_software = False
-
-
