@@ -1,7 +1,7 @@
 """
 This package is an attempt to make file reading/writing (possibly concurrent) more reliable.
 
-Last update 21/10/2024 - T. Pugnat
+Last update 28/10/2024 - T. Pugnat and F.F. Van der Veken
 """
 import sys
 import atexit
@@ -22,12 +22,12 @@ from .tools import ranID
 
 protected_open = {}
 
+
 # The functions registered via this module are not called when the program is killed by a signal not handled by Python, when a Python fatal internal error is detected, or when os._exit() is called.
 def exit_handler():
     """This handles cleaning of potential leftover lockfiles."""
     for file in protected_open.values():
         file.release(pop=False)
-atexit.register(exit_handler)
 
 # This one should handle those exceptions.
 def kill_handler(signum, frame):
@@ -36,8 +36,15 @@ def kill_handler(signum, frame):
     traceback.print_stack(frame)
     print(f"{signal.Signals(signum).name}: [Errno {signum}] A signal has been raised.")
     sys.exit(0)
-signal.signal(signal.SIGINT, kill_handler)
-signal.signal(signal.SIGTERM, kill_handler)
+
+def _register_exithandlers(obj):
+    if not hasattr(obj.__class__, '_exithandler_registered') \
+    or not obj.__class__._exithandler_registered:
+        atexit.register(exit_handler)
+        signal.signal(signal.SIGINT, kill_handler)
+        signal.signal(signal.SIGTERM, kill_handler)
+        obj.__class__._exithandler_registered = True
+
 
 def get_hash(filename, size=128):
     """Get a fast hash of a file, in chunks of 'size' (in kb)"""
@@ -171,6 +178,7 @@ class ProtectFile:
         Additionally, the following parameters are inherited from open():
             'file', 'mode', 'buffering', 'encoding', 'errors', 'newline', 'closefd', 'opener'
         """
+        _register_exithandlers(self)
 
         # File variables
         # ==============
