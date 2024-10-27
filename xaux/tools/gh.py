@@ -17,6 +17,14 @@ def assert_git_repo():
         else:
             _GIT_REPO = True
 
+def assert_git_repo_name(repo):
+    cmd = run(["git", "rev-parse", "--show-toplevel"], capture_output=True)
+    if cmd.returncode != 0:
+        raise GitError(f"{Path.cwd()} is not a git repository.")
+    else:
+        if Path(cmd.stdout.decode('UTF-8').strip()).name != repo:
+            raise GitError(f"{Path.cwd()} is not in the {repo} repository.")
+
 def assert_gh_installed():
     global _GH_INSTALLED
     if not _GH_INSTALLED:

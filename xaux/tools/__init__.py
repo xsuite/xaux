@@ -4,3 +4,4 @@
 # ######################################### #
 
 from .general_tools import *
+from .release_tools import dev_release, dev_make_release_branch, dev_rename_release_branch
