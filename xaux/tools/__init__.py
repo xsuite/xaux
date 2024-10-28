@@ -3,12 +3,5 @@
 # Copyright (c) CERN, 2024.                 #
 # ######################################### #
 
-from pathlib import Path
-
-_pkg_root = Path(__file__).parent.absolute()
-
-# ===================
-# Do not change
-# ===================
-__version__ = '0.2.0'
-# ===================
+from .general_tools import *
+from .release_tools import dev_release, dev_make_release_branch, dev_rename_release_branch

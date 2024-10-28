@@ -3,12 +3,6 @@
 # Copyright (c) CERN, 2024.                 #
 # ######################################### #
 
-from pathlib import Path
+import tempfile
 
-_pkg_root = Path(__file__).parent.absolute()
-
-# ===================
-# Do not change
-# ===================
-__version__ = '0.2.0'
-# ===================
+_tempdir = tempfile.TemporaryDirectory()
