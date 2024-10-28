@@ -6,7 +6,6 @@
 from pathlib import Path
 import os
 import pytest
-import numpy as np
 
 from xaux.fs import *
 from xaux.fs.afs import _fs_installed
@@ -199,13 +198,13 @@ def test_nested_fs(test_user):
     expected = [EosPath, AfsPath, EosPath, LocalPath, AfsPath,
                 AfsPath, AfsPath, AfsPath, AfsPath, AfsPath,
                 AfsPath, LocalPath, LocalPath]
-    assert np.all([isinstance(f, exp) for f, exp in zip(parents, expected)])
+    assert all([isinstance(f, exp) for f, exp in zip(parents, expected)])
     assert isinstance(path.resolve(), AfsPath)
     parents_res = [f.resolve() for f in path.parents]
     expected_res = [LocalPath, EosPath, AfsPath, EosPath, LocalPath,
                     AfsPath, AfsPath, AfsPath, AfsPath, AfsPath,
                     AfsPath, LocalPath, LocalPath]
-    assert np.all([isinstance(f, exp) for f, exp in zip(parents_res, expected_res)])
+    assert all([isinstance(f, exp) for f, exp in zip(parents_res, expected_res)])
 
     level1.unlink()
     level2.unlink()

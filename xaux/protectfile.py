@@ -259,36 +259,6 @@ class ProtectFile:
                 self._wait(wait)
                 continue
 
-            except FileExistsError:
-                # Lockfile exists, wait, check if it can be freed and try again
-                self._wait(wait)
-#                 if max_lock_time is not None:
-                if self.lockfile.exists():
-                    try:
-                        kill_lock = False
-                        try:
-                            with self.lockfile.open('r') as fid:
-                                info = json.load(fid)
-                        except:
-                            continue
-                        if 'free_after' in info and int(info['free_after']) > 0 \
-                        and int(info['free_after']) < time.time():
-                            # We free the original process by deleting the lockfile
-                            # and then we go to the next step in the while loop.
-                            # Note that this does not necessarily imply this process
-                            # gets to use the file; which is the intended behaviour
-                            # (first one wins).
-                            kill_lock = True
-                        if kill_lock:
-                            self.lockfile.unlink()
-                            self._print_debug("init",f"freed {self.lockfile} because "
-                                                + "of exceeding max_lock_time")
-                    except FileNotFoundError:
-                        # All is fine, the lockfile disappeared in the meanwhile.
-                        # Return to the while loop.
-                        continue
-                continue
-
             except PermissionError:
                 # Special case: we can still access eos files when permission has expired, using `eos`
                 if isinstance(self.file, EosPath):
@@ -316,35 +286,36 @@ class ProtectFile:
                     raise PermissionError(f"Cannot access {self.lockfile}; permission denied.")
 
             except OSError:
-                # An error happened while trying to generate the Lockfile. This raised an
-                # OSError: [Errno 5] Input/output error!
+                # Two typical cases: the lockfile already exists (FileExistsError, a subclass of OSError),
+                # or an input/output error happened while trying to generate it (generic OSError).
+                # In both cases, we wait a bit and try again.
                 self._wait(wait)
-                if self.lockfile.exists():
-#                 if max_lock_time is not None and self.lockfile.exists():
-                    try:
-                        kill_lock = False
-                        try:
-                            with self.lockfile.open('r') as fid:
-                                info = json.load(fid)
-                        except:
-                            continue
-                        if 'free_after' in info and int(info['free_after']) > 0 \
-                        and int(info['free_after']) < time.time():
-                            # We free the original process by deleting the lockfile
-                            # and then we go to the next step in the while loop.
-                            # Note that this does not necessarily imply this process
-                            # gets to use the file; which is the intended behaviour
-                            # (first one wins).
-                            kill_lock = True
-                        if kill_lock:
-                            self.lockfile.unlink()
-                            self._print_debug("init",f"freed {self.lockfile} because "
-                                                + "of exceeding max_lock_time")
-                    except FileNotFoundError:
-                        # All is fine, the lockfile disappeared in the meanwhile.
-                        # Return to the while loop.
-                        continue
-                continue
+                # We also have to capture the case where the lockfile expired and can be freed.
+                # So we try to read it and look for the timeout period; if this fails (e.g. because the
+                # lock disappeared in the meanwhile), we continue the mainloop
+                try:
+                    kill_lock = False
+                    with self.lockfile.open('r') as fid:
+                        info = json.load(fid)
+                    if 'free_after' in info and int(info['free_after']) > 0 \
+                    and int(info['free_after']) < time.time():
+                        # We free the original process by deleting the lockfile
+                        # and then we go to the next step in the while loop.
+                        # Note that this does not necessarily imply this process
+                        # gets to use the file; which is the intended behaviour
+                        # (first one wins).
+                        kill_lock = True
+                    if kill_lock:
+                        self.lockfile.unlink()
+                        self._print_debug("init",f"freed {self.lockfile} because "
+                                            + "of exceeding max_lock_time")
+                    # Whether or not the lockfile was freed, we continue to the main loop
+                    continue
+
+                except (OSError, json.JSONDecodeError):
+                    # Any error in trying to read (and potentially kill the lock) implies
+                    # a return to the main loop
+                    continue
 
         # Success!
         self._access = True
