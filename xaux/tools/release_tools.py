@@ -43,7 +43,7 @@ def dev_make_release_branch(package, bump=None, allow_major=False):
     print("Poetry version bump...")
     new_ver = _do_bump(expected_ver)
 
-    _adapt_version_files(package)
+    _adapt_version_files(package, new_ver)
     git_add(["pyproject.toml", f"{package}/general.py", "tests/test_version.py"])
     git_commit(f"Created release branch release/v{new_ver}.", no_verify=True)
     git_push(set_upstream=True)
@@ -83,7 +83,7 @@ def dev_rename_release_branch(package, bump=None, allow_major=False):
     print("Poetry version bump...")
     new_ver = _do_bump(expected_ver)
 
-    _adapt_version_files(package)
+    _adapt_version_files(package, new_ver)
     git_add(["pyproject.toml", f"{package}/general.py", "tests/test_version.py"])
     git_commit(f"Renamed release branch {branch} into {new_branch}.", no_verify=True)
     git_push(set_upstream=True)
@@ -127,7 +127,7 @@ def dev_release(package, bump=None, force=False, allow_major=False):
     print("Updating version in the release branch...")
     new_ver = _do_bump(expected_ver, bump)
 
-    _adapt_version_files(package)
+    _adapt_version_files(package, new_ver)
     _set_dependencies(package)
     git_add(["pyproject.toml", f"{package}/general.py", "tests/test_version.py"])
     git_commit(f"Updated version number to v{new_ver}.", no_verify=True)
@@ -240,7 +240,7 @@ def _do_bump(expected_ver, bump=None):
     return new_ver
 
 
-def _adapt_version_files(package):
+def _adapt_version_files(package, new_ver):
     for file, pattern in zip([f"{package}/general.py", "tests/test_version.py"],
                             ["__version__ = ", "    assert __version__ == "]):
         file_adapted = False
