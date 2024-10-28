@@ -27,8 +27,9 @@ def dev_make_release_branch(package, bump=None, allow_major=False):
     branch = git_current_branch()
     if branch != "main":
         raise GitError("This script needs to be ran on the main branch.")
-    git_push()   # Sync with the remote to be sure we don't delete an incomplete branch later
-    git_pull()
+    git_pull()   # Sync with the remote to be sure we don't delete an incomplete branch later
+    git_push()
+    print("Repository is clean.")
 
     expected_ver = poetry_get_expected_version(bump)
     _assert_not_major_version(expected_ver, 'make_release_branch.py', allow_major)
@@ -65,10 +66,10 @@ def dev_rename_release_branch(package, bump=None, allow_major=False):
     branch = git_current_branch()
     if branch != f"release/v{current_ver[:-3]}":
         raise GitError("This script needs to be ran from a release branch.")
-    git_push()   # Sync with the remote to be sure we don't delete an incomplete branch later
-    git_pull()
-
+    git_pull()   # Sync with the remote to be sure we don't delete an incomplete branch later
+    git_push()
     _assert_no_open_prs(branch)
+    print("Repository is clean.")
 
     expected_ver = poetry_get_expected_version(bump)
     _assert_not_major_version(expected_ver, 'rename_release_branch.py', allow_major)
@@ -116,12 +117,12 @@ def dev_release(package, bump=None, force=False, allow_major=False):
         if branch != f"release/v{expected_ver}":
             raise VersionError(f"\nYou are bumping to {expected_ver} but this branch is {branch}. "
                                     "If this is intentional, use --force.")
-    git_push()   # Sync with the remote to be sure we don't delete an incomplete branch later
-    git_pull()
+    git_pull()   # Sync with the remote to be sure we don't delete an incomplete branch later
+    git_push()
+    _assert_no_open_prs(branch)
     print("Repository is clean.")
 
     _assert_not_major_version(expected_ver, 'release.py', allow_major)
-    _assert_no_open_prs(branch)
     _confirm_version_bump(expected_ver)
     print("Updating version in the release branch...")
     new_ver = _do_bump(expected_ver, bump)
