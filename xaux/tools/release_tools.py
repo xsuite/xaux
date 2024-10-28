@@ -146,7 +146,7 @@ def dev_release(package, bump=None, force=False, allow_major=False):
     git_make_tag(f"v{new_ver}")
 
     print("Creating draft release and publishing to PyPi...")
-    gh_release_create(f"v{new_ver}", f"{package}.capitalize() release {new_ver}", draft=True)
+    gh_release_create(f"v{new_ver}", f"{package.capitalize()} release {new_ver}", draft=True)
     poetry_publish(build=True)
 
     print("All done!")
