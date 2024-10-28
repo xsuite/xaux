@@ -5,7 +5,7 @@
 
 import sys
 import platform
-import urllib
+import urllib.request
 from .gh import *
 
 class VersionError(OSError):
