@@ -260,9 +260,10 @@ class ProtectFile:
                 continue
 
             except FileExistsError:
-                # Lockfile exists, wait and try again
+                # Lockfile exists, wait, check if it can be freed and try again
                 self._wait(wait)
-                if max_lock_time is not None:
+#                 if max_lock_time is not None:
+                if self.lockfile.exists():
                     try:
                         kill_lock = False
                         try:
