@@ -4,7 +4,6 @@
 # ######################################### #
 
 import os
-import numpy as np
 from shutil import copy2, copytree
 from subprocess import run, PIPE
 import warnings

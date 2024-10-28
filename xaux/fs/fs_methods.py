@@ -4,7 +4,7 @@
 # ######################################### #
 
 import os
-from numpy import prod
+from math import prod
 from subprocess import run, PIPE, CalledProcessError
 
 

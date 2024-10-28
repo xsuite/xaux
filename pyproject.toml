@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xaux"
-version = "0.2.0"
+version = "0.2.1"
 description = "Support tools for Xsuite packages"
 authors = ["Frederik F. Van der Veken <frederik@cern.ch>",
            "Thomas Pugnat <thomas.pugnat@cern.ch>",
@@ -13,7 +13,6 @@ include = ["LICENSE", "NOTICE"]
 
 [tool.poetry.dependencies]
 python = ">=3.8, <3.12"
-numpy = ">=1.0"
 
 [tool.poetry.dev-dependencies]
 pytest = ">=7.3"
