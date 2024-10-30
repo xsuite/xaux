@@ -359,7 +359,7 @@ class ProtectFile:
         free_after = -1
         if max_lock_time is not None:
             free_after = int(time.time() + max_lock_time)
-            free_after = f"{free_after:15d}"[:15]
+        free_after = f"{free_after:15d}"[:15]
         # We ensure that the variables in the lockfile always have a fixed number of characters
         ran = random.randint(0, 2**63 - 1) + os.getpid() + int(time.time_ns() % 1e9)
         self._ran = f"{ran:0>20d}"
