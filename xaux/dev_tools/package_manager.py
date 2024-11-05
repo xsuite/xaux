@@ -41,10 +41,6 @@ def import_package_version(package_name, version, wipe_cache=False):
                 sys.meta_path.remove(finder_name)
     sys.path.insert(0, package_path.as_posix())
     try:
-        # print(sys.path)
-        # import pathlib
-        # for file in pathlib.Path(sys.path[0]).glob('*/'):
-        #     print(file)
         module = importlib.import_module(package_name)
         yield module
     finally:

@@ -4,9 +4,9 @@
 # ######################################### #
 
 import sys
-import platform
-import urllib
 from .gh import *
+from .pypi import get_latest_package_version
+
 
 class VersionError(OSError):
     pass
@@ -205,8 +205,7 @@ def _set_dependencies(package):
     xsuite_pkgs.remove(package)
     latest_version = {}
     for pkg in xsuite_pkgs:
-        data = json.loads(urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json").read())
-        latest_version[pkg] = data['info']['version']
+        latest_version[pkg] = get_latest_package_version(pkg)
     with Path("pyproject.toml").open("r") as fid:
         lines = fid.readlines()
     with Path("pyproject.toml").open("w") as fid:
