@@ -12,7 +12,7 @@ class VersionError(OSError):
     pass
 
 
-def dev_make_release_branch(package, bump=None, allow_major=False):
+def make_release_branch(package, bump=None, allow_major=False):
     if bump is None:
         bump, _ = _parse_argv(optional_force=False)
 
@@ -51,7 +51,7 @@ def dev_make_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def dev_rename_release_branch(package, bump=None, allow_major=False):
+def rename_release_branch(package, bump=None, allow_major=False):
     if bump is None:
         bump, _ = _parse_argv(optional_force=False)
 
@@ -91,7 +91,7 @@ def dev_rename_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def dev_release(package, bump=None, force=False, allow_major=False):
+def make_release(package, bump=None, force=False, allow_major=False):
     if bump is None:
         bump, force = _parse_argv(optional_force=True)
 

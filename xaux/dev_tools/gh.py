@@ -1,7 +1,7 @@
 import sys
 import json
 from pathlib import Path
-from subprocess import run, PIPE
+from subprocess import run
 
 _GIT_REPO = False
 _GH_INSTALLED = False
