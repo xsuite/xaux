@@ -27,20 +27,30 @@ def import_package_version(package_name, version, wipe_cache=False):
 
     original_sys_path = sys.path.copy()
     original_sys_modules = sys.modules.copy()
-    sys.path.insert(0, package_path)
+    original_sys_meta_path = sys.meta_path.copy()
     for mod_name in list(sys.modules):
-        if mod_name == package_name or mod_name.startswith(package_name + '.'):
+        if package_name == mod_name or mod_name.startswith(package_name + '.'):
             del sys.modules[mod_name]
-    print(list(sys.modules.keys()))
-    print(sys.path)
+    for finder_name in sys.meta_path:
+        if package_name in str(finder_name):
+            sys.meta_path.remove(finder_name)
+    if wipe_cache:
+        importlib.invalidate_caches()
+        for finder_name in sys.meta_path:
+            if 'editable' in str(finder_name):
+                sys.meta_path.remove(finder_name)
+    sys.path.insert(0, package_path.as_posix())
     try:
-        if wipe_cache:
-            importlib.invalidate_caches()
+        # print(sys.path)
+        # import pathlib
+        # for file in pathlib.Path(sys.path[0]).glob('*/'):
+        #     print(file)
         module = importlib.import_module(package_name)
         yield module
     finally:
         sys.path = original_sys_path
         sys.modules = original_sys_modules
+        sys.meta_path = original_sys_meta_path
 
 
 def install_package_version(package_name, version, overwrite=False):
