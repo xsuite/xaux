@@ -64,6 +64,7 @@ def rename_release_branch(package, bump=None, allow_major=False):
     # Check our working directory is clean
     git_assert_working_tree_clean()
     branch = git_current_branch()
+    current_ver = poetry_get_version()
     if branch != f"release/v{current_ver[:-3]}":
         raise GitError("This script needs to be ran from a release branch.")
     git_pull()   # Sync with the remote to be sure we don't delete an incomplete branch later
