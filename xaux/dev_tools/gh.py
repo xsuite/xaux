@@ -11,37 +11,49 @@ _POETRY_INSTALLED = False
 def assert_git_repo():
     global _GIT_REPO
     if not _GIT_REPO:
-        cmd = run(["git", "status"], capture_output=True)
+        try:
+            cmd = run(["git", "status"], capture_output=True)
+            if cmd.returncode != 0:
+                raise GitError(f"{Path.cwd()} is not a git repository.")
+            else:
+                _GIT_REPO = True
+        except FileNotFoundError:
+            raise GitError("git is not installed.")
+
+def assert_git_repo_name(repo):
+    try:
+        cmd = run(["git", "rev-parse", "--show-toplevel"], capture_output=True)
         if cmd.returncode != 0:
             raise GitError(f"{Path.cwd()} is not a git repository.")
         else:
-            _GIT_REPO = True
-
-def assert_git_repo_name(repo):
-    cmd = run(["git", "rev-parse", "--show-toplevel"], capture_output=True)
-    if cmd.returncode != 0:
-        raise GitError(f"{Path.cwd()} is not a git repository.")
-    else:
-        if Path(cmd.stdout.decode('UTF-8').strip()).name != repo:
-            raise GitError(f"{Path.cwd()} is not in the {repo} repository.")
+            if Path(cmd.stdout.decode('UTF-8').strip()).name != repo:
+                raise GitError(f"{Path.cwd()} is not in the {repo} repository.")
+    except FileNotFoundError:
+        raise GitError("git is not installed.")
 
 def assert_gh_installed():
     global _GH_INSTALLED
     if not _GH_INSTALLED:
-        cmd = run(["gh", "--version"], capture_output=True)
-        if cmd.returncode != 0:
+        try:
+            cmd = run(["gh", "--version"], capture_output=True)
+            if cmd.returncode != 0:
+                raise GhError("gh is not installed.")
+            else:
+                _GH_INSTALLED = True
+        except FileNotFoundError:
             raise GhError("gh is not installed.")
-        else:
-            _GH_INSTALLED = True
 
 def assert_poetry_installed():
     global _POETRY_INSTALLED
     if not _POETRY_INSTALLED:
-        cmd = run(["poetry", "--version"], capture_output=True)
-        if cmd.returncode != 0:
+        try:
+            cmd = run(["poetry", "--version"], capture_output=True)
+            if cmd.returncode != 0:
+                raise PoetryError("poetry is not installed.")
+            else:
+                _POETRY_INSTALLED = True
+        except FileNotFoundError:
             raise PoetryError("poetry is not installed.")
-        else:
-            _POETRY_INSTALLED = True
 
 
 def git_assert_working_tree_clean():
