@@ -4,7 +4,7 @@
 # ######################################### #
 
 import json
-import urllib
+import urllib.request
 from packaging.version import Version
 
 
