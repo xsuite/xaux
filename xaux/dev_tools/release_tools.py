@@ -5,7 +5,7 @@
 
 import sys
 from .gh import *
-from .pypi import get_latest_package_version
+from .package_manager import get_latest_package_version
 
 
 class VersionError(OSError):
@@ -157,8 +157,9 @@ def _parse_argv(optional_force=False):
     # Check the script arguments
     num_max_args = 3 if optional_force else 2
     if len(sys.argv) < 2 or len(sys.argv) > num_max_args:
-        raise ValueError("This script needs exactly one argument: the new version number or a bump. "
-                        "The latter can be: patch, minor, major.")
+        raise ValueError("Are you running CLI?\nThen this script needs exactly one argument: "
+                       + "the new version number or a bump (which can be: patch, minor, major).\n"
+                       + "If running in python, please provide the argument `bump=...`.")
     bump = sys.argv[1]
     force = False
     if optional_force and len(sys.argv) == num_max_args:
