@@ -192,15 +192,41 @@ def test_nested_fs(test_user):
         level6.unlink()
     level6.symlink_to(level6_res)
 
+    for l in [level1, level2, level3, level4, level5, level6]:
+        assert l.lexists()
+        assert l.is_symlink()
+    for d in [level1_res, level2_res, level3_res, level4_res, level5_res, level6_res]:
+        assert d.exists()
+        assert d.is_dir()
+        assert not d.is_symlink()
+    for l, d in zip([level1, level2, level3, level4, level5, level6],
+                    [level1_res, level2_res, level3_res, level4_res, level5_res, level6_res]):
+        assert l.resolve() == d
+
+    assert isinstance(level1, AfsPath)
+    assert isinstance(level2, LocalPath)
+    assert isinstance(level3, EosPath)
+    assert isinstance(level4, AfsPath)
+    assert isinstance(level5, EosPath)
+    assert isinstance(level6, LocalPath)
+    assert isinstance(level1_res, LocalPath)
+    assert isinstance(level2_res, EosPath)
+    assert isinstance(level3_res, AfsPath)
+    assert isinstance(level4_res, EosPath)
+    assert isinstance(level5_res, LocalPath)
+    assert isinstance(level6_res, AfsPath)
+
     path = level1 / "level2" / "level3" / "level4" / "level5" / "level6"
     assert isinstance(path, LocalPath)
     parents = [f for f in path.parents]
+    assert len(parents) == 13
     expected = [EosPath, AfsPath, EosPath, LocalPath, AfsPath,
                 AfsPath, AfsPath, AfsPath, AfsPath, AfsPath,
                 AfsPath, LocalPath, LocalPath]
     assert all([isinstance(f, exp) for f, exp in zip(parents, expected)])
     assert isinstance(path.resolve(), AfsPath)
     parents_res = [f.resolve() for f in path.parents]
+    assert len(parents_res) == 13
     expected_res = [LocalPath, EosPath, AfsPath, EosPath, LocalPath,
                     AfsPath, AfsPath, AfsPath, AfsPath, AfsPath,
                     AfsPath, LocalPath, LocalPath]

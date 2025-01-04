@@ -255,8 +255,8 @@ def test_eos_components(test_user):
     broken_mgm_files.append(f"root:/eoshome.cern.ch/{file_ref}")
     broken_mgm_files.append(f"root://afshome.cern.ch/{file_ref}")
     for file in broken_mgm_files:
-        with pytest.raises(ValueError, match="Invalid EOS path specification"):
+        with pytest.raises(ValueError, match="Invalid EosPath specification"):
             path = EosPath(file)
-    with pytest.raises(ValueError, match="Unknown path specification"):
+    with pytest.raises(ValueError, match="Unknown EosPath specification"):
         path = FsPath(broken_mgm_files[-1])
 

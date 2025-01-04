@@ -49,4 +49,4 @@ def test_user(request):
                             + "your access rights (is your ticket still alive?).\nAlternatively, specify the test "
                             + "user account with the option `--user username`\nI Tried the following paths:\n    "
                             + "\n    ".join(eos_paths_tried) + "\nThe relevant EosPath tests will be skipped.")
-    return {"test_user": test_user, "afs_path":  afs_path, "skip_afs": skip_afs, "eos_path":  eos_path, "skip_eos": skip_eos}
+    return {"test_user": test_user, "afs_path": afs_path, "skip_afs": skip_afs, "eos_path": eos_path, "skip_eos": skip_eos}
