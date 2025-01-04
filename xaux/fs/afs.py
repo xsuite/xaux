@@ -32,13 +32,16 @@ def _assert_afs_accessible(mess=None):
         mess = f" {mess}" if mess is not None else mess
         raise OSError(f"AFS is not installed on your system.{mess}")
 
+# Note: /afs itself is not on AFS (it is a mountpoint on the local disk)
 def _on_afs(*args):
-    if isinstance(args[0], str):
-        if args[0] == '/afs' or args[0].startswith('/afs/'):
-            return True
-        elif args[0] == '/' and len(args) > 1 \
-        and (args[1] == 'afs' or args[1] == 'afs/'):
-            return True
+    # We cannot recognise path file systems by string because of symlinks
+    # if isinstance(args[0], str):
+    #     if args[0].startswith('/afs/'):
+    #         return True
+    #     elif args[0] == '/' and len(args) > 1 \
+    #     and (args[1].startswith('afs/') or \
+    #         (args[1] == 'afs' and len(args) > 2)):
+    #         return True
     absolute = _non_strict_resolve(Path(*args).expanduser().absolute().parent)
     if absolute == _afs_path:
         return True
@@ -54,28 +57,33 @@ class AfsPath(FsPath, Path):
     __slots__ = ('afs_cell')
 
     def __new__(cls, *args, _afs_checked=False):
-        if sys.version_info >= (3, 12):
-            raise RuntimeError("This class is not yet compatible with Python 3.12 or higher.")
         if cls is AfsPath:
             cls = AfsWindowsPath if os.name == 'nt' else AfsPosixPath
         with cls._in_constructor():
             try:
                 self = cls._from_parts(args)
             except AttributeError:
-                self = object.__new__(cls)
-            if not _afs_checked and not _on_afs(self):
+                self = Path.__new__(cls, *args)
+        with cls._in_constructor(_force=True):
+            if not _afs_checked and not _on_afs(*args):
                 raise ValueError("The path is not on AFS.")
         return self
 
     def __init__(self, *args):
         with self.__class__._in_constructor():
-            super().__init__()
+            if sys.version_info >= (3, 12):
+                Path.__init__(self, *args)
+            else:
+                Path.__init__(self)
         with self.__class__._in_constructor(_force=True):
             parent = self.parent
         if parent == _afs_path:
             self.afs_cell = self.name
         else:
-            self.afs_cell = _non_strict_resolve(parent, _as_posix=True).split('/')[2].upper()
+            res_parts = _non_strict_resolve(parent, _as_posix=True).split('/')
+            if len(res_parts) < 3:
+                raise ValueError("Malformed AfsPath.")
+            self.afs_cell = res_parts[2].upper()
 
     # Overwrite Path methods
     # ======================

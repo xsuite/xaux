@@ -3,4 +3,5 @@
 # Copyright (c) CERN, 2024.                 #
 # ######################################### #
 
-from .general_tools import *
+from .release_tools import make_release, make_release_branch, rename_release_branch
+from .package_manager import *

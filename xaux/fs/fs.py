@@ -33,11 +33,13 @@ class FsPath:
     depending on the file system the path is on. Note that a LocalPath
     is just a regular Path object but with access to the FsPath methods.
     """
+    __slots__ = ()
+
     def __new__(cls, *args):
-        if sys.version_info >= (3, 12):
-            raise RuntimeError("This class is not yet compatible with Python 3.12 or higher.")
         from .eos import EosPath, _on_eos
         from .afs import AfsPath, _on_afs
+        if len(args) == 0:
+            args = ('.',)
         if _on_eos(*args):
             return EosPath.__new__(EosPath, *args, _eos_checked=True)
         elif _on_afs(*args):
@@ -227,20 +229,21 @@ class LocalPath(FsPath, Path):
     """
 
     def __new__(cls, *args):
-        if sys.version_info >= (3, 12):
-            raise RuntimeError("This class is not yet compatible with Python 3.12 or higher.")
         if cls is LocalPath:
             cls = LocalWindowsPath if os.name == 'nt' else LocalPosixPath
         with cls._in_constructor():
             try:
                 self = cls._from_parts(args)
             except AttributeError:
-                self = object.__new__(cls)
+                self = Path.__new__(cls, *args)
         return self
 
     def __init__(self, *args):
         with self.__class__._in_constructor():
-            super().__init__()
+            if sys.version_info >= (3, 12):
+                Path.__init__(self, *args)
+            else:
+                Path.__init__(self)
 
 
 class LocalPosixPath(LocalPath, PurePosixPath):

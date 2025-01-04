@@ -4,15 +4,15 @@
 # ######################################### #
 
 import sys
-import platform
-import urllib.request
 from .gh import *
+from .package_manager import get_latest_package_version
+
 
 class VersionError(OSError):
     pass
 
 
-def dev_make_release_branch(package, bump=None, allow_major=False):
+def make_release_branch(package, bump=None, allow_major=False):
     if bump is None:
         bump, _ = _parse_argv(optional_force=False)
 
@@ -51,7 +51,7 @@ def dev_make_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def dev_rename_release_branch(package, bump=None, allow_major=False):
+def rename_release_branch(package, bump=None, allow_major=False):
     if bump is None:
         bump, _ = _parse_argv(optional_force=False)
 
@@ -64,6 +64,7 @@ def dev_rename_release_branch(package, bump=None, allow_major=False):
     # Check our working directory is clean
     git_assert_working_tree_clean()
     branch = git_current_branch()
+    current_ver = poetry_get_version()
     if branch != f"release/v{current_ver[:-3]}":
         raise GitError("This script needs to be ran from a release branch.")
     git_pull()   # Sync with the remote to be sure we don't delete an incomplete branch later
@@ -91,7 +92,7 @@ def dev_rename_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def dev_release(package, bump=None, force=False, allow_major=False):
+def make_release(package, bump=None, force=False, allow_major=False):
     if bump is None:
         bump, force = _parse_argv(optional_force=True)
 
@@ -156,8 +157,9 @@ def _parse_argv(optional_force=False):
     # Check the script arguments
     num_max_args = 3 if optional_force else 2
     if len(sys.argv) < 2 or len(sys.argv) > num_max_args:
-        raise ValueError("This script needs exactly one argument: the new version number or a bump. "
-                        "The latter can be: patch, minor, major.")
+        raise ValueError("Are you running CLI?\nThen this script needs exactly one argument: "
+                       + "the new version number or a bump (which can be: patch, minor, major).\n"
+                       + "If running in python, please provide the argument `bump=...`.")
     bump = sys.argv[1]
     force = False
     if optional_force and len(sys.argv) == num_max_args:
@@ -205,8 +207,7 @@ def _set_dependencies(package):
     xsuite_pkgs.remove(package)
     latest_version = {}
     for pkg in xsuite_pkgs:
-        data = json.loads(urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json").read())
-        latest_version[pkg] = data['info']['version']
+        latest_version[pkg] = get_latest_package_version(pkg)
     with Path("pyproject.toml").open("r") as fid:
         lines = fid.readlines()
     with Path("pyproject.toml").open("w") as fid:
