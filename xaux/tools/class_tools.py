@@ -11,19 +11,20 @@ from .function_tools import count_required_arguments
 
 def singleton(cls, allow_underscore_vars_in_init=False):
     # Monkey-patch the __new__ method to create a singleton
-    original_new = cls.__new__ if '__new__' in cls.__dict__ else None
+    original_new = cls.__dict__.get('__new__', None)
+    cls._singleton_instance = None
     def singleton_new(cls, *args, **kwargs):
-        if not hasattr(cls, 'instance'):
-            cls.instance = (original_new(cls, *args, **kwargs) \
+        if cls._singleton_instance is None: # Check if the class is already initialised
+            cls._singleton_instance = (original_new(cls, *args, **kwargs) \
                             if original_new \
                             else super(cls, cls).__new__(cls))
-            cls.instance._initialised = False
-            cls.instance._valid = True
-        return cls.instance
+            cls._singleton_instance._initialised = False
+            cls._singleton_instance._valid = True
+        return cls._singleton_instance
     cls.__new__ = singleton_new
 
     # Monkey-patch the __init__ method to set the singleton fields
-    original_init = cls.__init__ if '__init__' in cls.__dict__ else None
+    original_init = cls.__dict__.get('__init__', None)
     if original_init:
         if count_required_arguments(original_init) > 1:
             raise ValueError(f"Cannot create a singleton with an __init__ method that "
@@ -44,6 +45,17 @@ def singleton(cls, allow_underscore_vars_in_init=False):
             setattr(self, kk, vv)
     cls.__init__ = singleton_init
 
+    # Monkey-patch the __getattribute__ method to assert the instance belongs to the current singleton
+    original_getattribute = cls.__dict__.get('__getattribute__', None)
+    def singleton_getattribute(self, name):
+        if not super(cls, self).__getattribute__('_valid'):
+            raise RuntimeError(f"This instance of the singleton {cls.__name__} has been invalidated!")
+        if original_getattribute:
+            return original_getattribute(self, name)
+        else:
+            return super(cls, self).__getattribute__(name)
+    cls.__getattribute__ = singleton_getattribute
+
     # Define the get_self method
     @classmethod
     def get_self(cls, **kwargs):
@@ -51,7 +63,7 @@ def singleton(cls, allow_underscore_vars_in_init=False):
         # (to recognise get the allowed fields)
         cls()
         filtered_kwargs = {key: value for key, value in kwargs.items()
-                           if hasattr(cls, key) or hasattr(cls.instance, key)}
+                           if hasattr(cls, key) or hasattr(cls._singleton_instance, key)}
         if not allow_underscore_vars_in_init:
             filtered_kwargs = {key: value for key, value in filtered_kwargs.items()
                                if not key.startswith('_')}
@@ -61,21 +73,10 @@ def singleton(cls, allow_underscore_vars_in_init=False):
     # Define the delete method
     @classmethod
     def delete(cls):
-        if hasattr(cls, 'instance'):
-            cls.instance._valid = False # Invalidate existing instances
-            del cls.instance
+        if cls._singleton_instance is not None:
+            cls._singleton_instance._valid = False # Invalidate existing instances
+            cls._singleton_instance = None
     cls.delete = delete
-
-    # Monkey-patch the __getattribute__ method to assert the instance belongs to the current singleton
-    original_getattribute = cls.__getattribute__ if '__getattribute__' in cls.__dict__ else None
-    def singleton_getattribute(self, name):
-        if not super(cls, self).__getattribute__('_valid'):
-            raise RuntimeError(f"This instance of the singleton {cls.__name__} has been invalidated!")
-        if original_getattribute:
-            return original_getattribute(self, name)
-        else:
-            return super(cls, self).__getattribute__(name)
-    cls.__getattribute__ = singleton_getattribute
 
     return cls
 
