@@ -6,6 +6,8 @@
 import functools
 from pathlib import Path
 
+from .function_tools import count_required_arguments
+
 
 def singleton(cls, allow_underscore_vars_in_init=False):
     # Monkey-patch the __new__ method to create a singleton
@@ -22,6 +24,10 @@ def singleton(cls, allow_underscore_vars_in_init=False):
 
     # Monkey-patch the __init__ method to set the singleton fields
     original_init = cls.__init__ if '__init__' in cls.__dict__ else None
+    if original_init:
+        if count_required_arguments(original_init) > 1:
+            raise ValueError(f"Cannot create a singleton with an __init__ method that "
+                           + "has more than one required argument (only 'self' is allowed)!")
     def singleton_init(self, *args, **kwargs):
         kwargs.pop('_initialised', None)
         if not self._initialised:
@@ -41,8 +47,8 @@ def singleton(cls, allow_underscore_vars_in_init=False):
     # Define the get_self method
     @classmethod
     def get_self(cls, **kwargs):
-        # Need to initialise class once to get the allowed fields on the instance
-        # TODO: this does not work if the __init__ has obligatory arguments
+        # Need to initialise class in case the instance does not yet exist
+        # (to recognise get the allowed fields)
         cls()
         filtered_kwargs = {key: value for key, value in kwargs.items()
                            if hasattr(cls, key) or hasattr(cls.instance, key)}
