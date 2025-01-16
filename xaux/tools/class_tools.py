@@ -9,101 +9,131 @@ from pathlib import Path
 from .function_tools import count_required_arguments
 
 
-def singleton(cls, allow_underscore_vars_in_init=False):
-    # The singleton will be represented by a single instance
-    cls._singleton_instance = None
+# Singleton decorator.
+# This decorator will make a class a singleton, i.e. it will only allow one instance,
+# and will return the same instance every time it is called. The singleton can be
+# reset by calling the delete method of the class, which will invalidate any existing
+# instances. Each re-initialisation of the singleton will keep the class attributes,
+# and for this reason, the __init__ method should not have any required arguments.
+# This is asserted at the class creation time. Furthermore, by default the singleton
+# will not allow setting private attributes in the constructor, but this can be
+# overridden by setting allow_underscore_vars_in_init=True in the decorator.
+# This is fully compatible with inheritance, and each child of a singleton class will
+# be its own singleton.
+# Lastly, the decorator provides a get_self method, which is a class method that is
+# more relaxed than the constructor, as it allows passing any kwargs, even if they
+# aren't attributes for the singleton (these  will then just be ignored). This is
+# useful for kwargs filtering in getters or specific functions.
+#
+# Caveat I in the implementation: whenever any monkey-patched method is called, the
+# super method should be called on the original singleton class (not the current class),
+# to avoid infinite loops (it would just call the same method again).
+# Caveat II in the implementation: When we need to get the current class of an instance,
+# we should use type(self) instead of self.__class__, as the latter will get into an
+# infinite loop because of the __getattribute__ method.
 
-    # Monkey-patch __new__ to create a singleton
-    original_new = cls.__dict__.get('__new__', None)
-    def singleton_new(this_cls, *args, **kwargs):
-        # print(f"In singleton_new: {this_cls}")
-        # If the singleton instance does not exist, create it
-        if this_cls._singleton_instance is None:
-            this_cls._singleton_instance = (original_new(this_cls, *args, **kwargs) \
-                            if original_new \
-                            else super(this_cls, this_cls).__new__(this_cls))
-            this_cls._singleton_instance._initialised = False
-            this_cls._singleton_instance._valid = True
-        return this_cls._singleton_instance
-    cls.__new__ = singleton_new
 
-    # Monkey-patch __init__ to set the singleton fields
-    original_init = cls.__dict__.get('__init__', None)
-    if original_init:
-        if count_required_arguments(original_init) > 1:
-            raise ValueError(f"Cannot create a singleton with an __init__ method that "
-                           + "has more than one required argument (only 'self' is allowed)!")
-    def singleton_init(self, *args, **kwargs):
-        # print(f"In singleton_init: {self.__class__}")
-        # Validate kwargs
-        kwargs.pop('_initialised', None)
-        for kk, vv in kwargs.items():
-            if not allow_underscore_vars_in_init and kk.startswith('_'):
-                raise ValueError(f"Cannot set private attribute {kk} for {this_cls.__name__}! "
-                                + "Use the appropriate setter method instead. However, if you "
-                                + "really want to be able to set this attribute in the "
-                                + "constructor, use 'allow_underscore_vars_in_init=True' "
-                                + "in the singleton decorator.")
-        # Get the current class type (this is not 'cls' as it might be a subclass). Also note that
-        # self.__class__ would get into an infinite loop because of the __getattribute__ method
-        this_cls = type(self)
-        # Initialise the singleton if it has not been initialised yet
-        if not self._initialised:
-            if original_init:
-                original_init(self, *args, **kwargs)
+def singleton(_cls=None, *, allow_underscore_vars_in_init=False):
+    def decorator_singleton(cls):
+        # Monkey-patch __new__ to create a singleton
+        original_new = cls.__dict__.get('__new__', None)
+        @functools.wraps(cls)
+        def singleton_new(this_cls, *args, **kwargs):
+            print(f"In singleton_new: {this_cls}")
+            # If the singleton instance does not exist, create it
+            if '_singleton_instance' not in this_cls.__dict__:
+                if original_new:
+                    inst = original_new(cls_to_call, *args, **kwargs)
+                else:
+                    try:
+                        inst = super(cls, cls).__new__(this_cls, *args, **kwargs)
+                    except TypeError:
+                        inst = super(cls, cls).__new__(this_cls)
+                print(inst)
+                inst._initialised = False
+                inst._valid = True
+                this_cls._singleton_instance = inst
+            return this_cls._singleton_instance
+        cls.__new__ = singleton_new
+
+        # Monkey-patch __init__ to set the singleton fields
+        original_init = cls.__dict__.get('__init__', None)
+        if original_init:
+            if count_required_arguments(original_init) > 1:
+                raise ValueError(f"Cannot create a singleton with an __init__ method that "
+                            + "has more than one required argument (only 'self' is allowed)!")
+        @functools.wraps(cls)
+        def singleton_init(self, *args, **kwargs):
+            this_cls = type(self)
+            print(f"In singleton_init: {this_cls}")
+            # Validate kwargs
+            kwargs.pop('_initialised', None)
+            for kk, vv in kwargs.items():
+                if not allow_underscore_vars_in_init and kk.startswith('_'):
+                    raise ValueError(f"Cannot set private attribute {kk} for {this_cls.__name__}! "
+                                    + "Use the appropriate setter method instead. However, if you "
+                                    + "really want to be able to set this attribute in the "
+                                    + "constructor, use 'allow_underscore_vars_in_init=True' "
+                                    + "in the singleton decorator.")
+            # Initialise the singleton if it has not been initialised yet
+            if not self._initialised:
+                if original_init:
+                    original_init(self, *args, **kwargs)
+                else:
+                    super(cls, self).__init__(*args, **kwargs)
+                self._initialised = True
+            # Set the attributes; only attributes defined in the class, custom init, or properties
+            # are allowed
+            for kk, vv in kwargs.items():
+                if not hasattr(self, kk) and not hasattr(this_cls, kk):
+                    raise ValueError(f"Invalid attribute {kk} for {this_cls.__name__}!")
+                setattr(self, kk, vv)
+        cls.__init__ = singleton_init
+
+        # Monkey-patch __getattribute__ to assert the instance belongs to the current singleton
+        original_getattribute = cls.__dict__.get('__getattribute__', None)
+        @functools.wraps(cls)
+        def singleton_getattribute(self, name):
+            this_cls = type(self)
+            if not hasattr(this_cls, '_singleton_instance') or not super(cls, self).__getattribute__('_valid'):
+                raise RuntimeError(f"This instance of the singleton {this_cls.__name__} has been "
+                                + "invalidated!")
+            if original_getattribute:
+                return original_getattribute(self, name)
             else:
-                super(this_cls, self).__init__(*args, **kwargs)
-            self._initialised = True
-        # Set the attributes; only attributes defined in the class, custom init, or properties
-        # are allowed
-        for kk, vv in kwargs.items():
-            if not hasattr(self, kk) and not hasattr(this_cls, kk):
-                raise ValueError(f"Invalid attribute {kk} for {this_cls.__name__}!")
-            setattr(self, kk, vv)
-    cls.__init__ = singleton_init
+                return super(cls, self).__getattribute__(name)
+        cls.__getattribute__ = singleton_getattribute
 
-    # Monkey-patch __getattribute__ to assert the instance belongs to the current singleton
-    original_getattribute = cls.__dict__.get('__getattribute__', None)
-    def singleton_getattribute(self, name):
-        # Get the current class (this is not cls as it might be a subclass). Also note that 
-        # self.__class__ will get into an infinite loop because of the __getattribute__ method
-        this_cls = type(self)
-        if not super(this_cls, self).__getattribute__('_valid'):
-            raise RuntimeError(f"This instance of the singleton {this_cls.__name__} has been "
-                              + "invalidated!")
-        if original_getattribute:
-            return original_getattribute(self, name)
-        else:
-            return super(this_cls, self).__getattribute__(name)
-    cls.__getattribute__ = singleton_getattribute
+        @classmethod
+        @functools.wraps(cls)
+        def get_self(this_cls, **kwargs):
+            # Need to initialise in case the instance does not yet exist
+            # (to recognise the allowed fields)
+            this_cls()
+            filtered_kwargs = {key: value for key, value in kwargs.items()
+                            if hasattr(this_cls, key) \
+                            or hasattr(this_cls._singleton_instance, key)}
+            if not allow_underscore_vars_in_init:
+                filtered_kwargs = {key: value for key, value in filtered_kwargs.items()
+                                if not key.startswith('_')}
+            return this_cls(**filtered_kwargs)
+        cls.get_self = get_self
 
-    # Define the get_self method. This method is more relaxed than the constructor, as it allows
-    # setting any attribute, even if it is not defined in the class (it will then just be ignored).
-    # This is useful for kwargs filtering in getters or specific functions.
-    @classmethod
-    def get_self(this_cls, **kwargs):
-        # Need to initialise in case the instance does not yet exist
-        # (to recognise the allowed fields)
-        this_cls()
-        filtered_kwargs = {key: value for key, value in kwargs.items()
-                           if hasattr(this_cls, key) \
-                           or hasattr(this_cls._singleton_instance, key)}
-        if not allow_underscore_vars_in_init:
-            filtered_kwargs = {key: value for key, value in filtered_kwargs.items()
-                               if not key.startswith('_')}
-        return this_cls(**filtered_kwargs)
-    cls.get_self = get_self
+        @classmethod
+        @functools.wraps(cls)
+        def delete(this_cls):
+            if hasattr(this_cls, '_singleton_instance'):
+                # Invalidate (pointers to) existing instances!
+                this_cls._singleton_instance._valid = False
+                del this_cls._singleton_instance
+        cls.delete = delete
 
-    # Define the delete method to complete remove a singleton
-    @classmethod
-    def delete(this_cls):
-        if this_cls._singleton_instance is not None:
-            # Invalidate (pointers to) existing instances!
-            this_cls._singleton_instance._valid = False
-            this_cls._singleton_instance = None
-    cls.delete = delete
+        return cls
 
-    return cls
+    if _cls is None:
+        return decorator_singleton
+    else:
+        return decorator_singleton(_cls)
 
 
 class ClassPropertyMeta(type):

@@ -38,9 +38,9 @@ def test_singleton():
             self.value = value
 
     # Initialise with default value
-    assert SingletonClass1._singleton_instance is None
+    assert not hasattr(SingletonClass1, '_singleton_instance')
     instance1 = SingletonClass1()
-    assert SingletonClass1._singleton_instance is not None
+    assert hasattr(SingletonClass1, '_singleton_instance')
     assert instance1.value == 3
 
     # Initialise with specific value
@@ -66,7 +66,7 @@ def test_singleton():
 
     # Remove the singleton
     SingletonClass1.delete()
-    assert SingletonClass1._singleton_instance is None
+    assert not hasattr(SingletonClass1, '_singleton_instance')
     with pytest.raises(RuntimeError, match="This instance of the singleton SingletonClass1 "
                                          + "has been invalidated!"):
         instance1.value
@@ -79,7 +79,7 @@ def test_singleton():
 
     # First initialisation with specific value
     instance4 = SingletonClass1(value=8)
-    assert SingletonClass1._singleton_instance is not None
+    assert hasattr(SingletonClass1, '_singleton_instance')
     assert instance4.value == 8
     assert instance1 is not instance4
     assert instance2 is not instance4
@@ -90,11 +90,11 @@ def test_singleton():
 
     # Clean up
     SingletonClass1.delete()
-    assert SingletonClass1._singleton_instance is None
+    assert not hasattr(SingletonClass1, '_singleton_instance')
 
     # Test double deletion
     SingletonClass1.delete()
-    assert SingletonClass1._singleton_instance is None
+    assert not hasattr(SingletonClass1, '_singleton_instance')
 
 
 def test_singleton_structure():
@@ -237,9 +237,9 @@ def test_nonsingleton_inheritance():
 
     # Clean up
     SingletonChild1.delete()
-    assert SingletonChild1._singleton_instance is None
+    assert not hasattr(SingletonChild1, '_singleton_instance')
     SingletonChild2.delete()
-    assert SingletonChild2._singleton_instance is None
+    assert not hasattr(SingletonChild2, '_singleton_instance')
 
 
 def test_singleton_inheritance():
@@ -391,11 +391,11 @@ def test_singleton_inheritance():
 
     # Now delete all and start fresh, to ensure children can instantiate without parent existing.
     SingletonParent1.delete()
-    assert SingletonParent1._singleton_instance is None
+    assert not hasattr(SingletonParent1, '_singleton_instance')
     SingletonChild3.delete()
-    assert SingletonChild3._singleton_instance is None
+    assert not hasattr(SingletonChild3, '_singleton_instance')
     SingletonChild4.delete()
-    assert SingletonChild4._singleton_instance is None
+    assert not hasattr(SingletonChild4, '_singleton_instance')
 
     # Test the singleton child class without parent
     child3_instance5 = SingletonChild3()
@@ -456,12 +456,10 @@ def test_singleton_inheritance():
     assert child4_instance5.value2 == 22
 
     # Clean up
-    SingletonParent.delete()
-    assert SingletonParent._singleton_instance is None
     SingletonChild3.delete()
-    assert SingletonChild3._singleton_instance is None
+    assert not hasattr(SingletonChild3, '_singleton_instance')
     SingletonChild4.delete()
-    assert SingletonChild4._singleton_instance is None
+    assert not hasattr(SingletonChild4, '_singleton_instance')
 
 
 # This is the same test as above, but with the singleton decorator applied to parent and child
@@ -616,11 +614,11 @@ def test_double_singleton_inheritance():
 
     # Now delete all and start fresh, to ensure children can instantiate without parent existing.
     SingletonParent2.delete()
-    assert SingletonParent2._singleton_instance is None
+    assert not hasattr(SingletonParent2, '_singleton_instance')
     SingletonChild5.delete()
-    assert SingletonChild5._singleton_instance is None
+    assert not hasattr(SingletonChild5, '_singleton_instance')
     SingletonChild6.delete()
-    assert SingletonChild6._singleton_instance is None
+    assert not hasattr(SingletonChild6, '_singleton_instance')
 
     # Test the singleton child class without parent
     child5_instance5 = SingletonChild5()
@@ -682,30 +680,38 @@ def test_double_singleton_inheritance():
 
     # Clean up
     SingletonChild5.delete()
-    assert SingletonChild5._singleton_instance is None
+    assert not hasattr(SingletonChild5, '_singleton_instance')
     SingletonChild6.delete()
-    assert SingletonChild6._singleton_instance is None
+    assert not hasattr(SingletonChild6, '_singleton_instance')
+
+
+def test_allow_underscore():
+    @singleton(allow_underscore_vars_in_init=True)
+    class SingletonClass3:
+        def __init__(self, _value1=7.3, value2='hello'):
+            self._value1 = _value1
+            self.value2 = value2
 
 
 def test_get_self():
     @singleton
-    class SingletonClass3:
+    class SingletonClass4:
         def __init__(self, value=19):
             self.value = value
 
     # Initialise with default value
-    instance = SingletonClass3()
+    instance = SingletonClass4()
     instance.value = 19
 
     # Get self with default value
-    self1 = SingletonClass3.get_self()
+    self1 = SingletonClass4.get_self()
     assert self1 is instance
     assert id(self1) == id(instance)
     assert self1.value == 19
     assert instance.value == 19
 
     # Get self with specific value
-    self2 = SingletonClass3.get_self(value=11)
+    self2 = SingletonClass4.get_self(value=11)
     assert self2 is instance
     assert self2 is self1
     assert id(self2) == id(instance)
@@ -715,7 +721,7 @@ def test_get_self():
     assert self2.value == 11
 
     # Get self with non-existing attribute
-    self3 = SingletonClass3.get_self(non_existing_attribute=13)
+    self3 = SingletonClass4.get_self(non_existing_attribute=13)
     assert self3 is instance
     assert self3 is self1
     assert self3 is self2
@@ -726,14 +732,14 @@ def test_get_self():
     assert self1.value == 11
     assert self2.value == 11
     assert self3.value == 11
-    assert not hasattr(SingletonClass3, 'non_existing_attribute')
+    assert not hasattr(SingletonClass4, 'non_existing_attribute')
     assert not hasattr(instance, 'non_existing_attribute')
     assert not hasattr(self1, 'non_existing_attribute')
     assert not hasattr(self2, 'non_existing_attribute')
     assert not hasattr(self3, 'non_existing_attribute')
 
     # Get self with specific value and non-existing attribute
-    self4 = SingletonClass3.get_self(value=12, non_existing_attribute=13)
+    self4 = SingletonClass4.get_self(value=12, non_existing_attribute=13)
     assert self4 is instance
     assert self4 is self1
     assert self4 is self2
@@ -747,7 +753,7 @@ def test_get_self():
     assert self2.value == 12
     assert self3.value == 12
     assert self4.value == 12
-    assert not hasattr(SingletonClass3, 'non_existing_attribute')
+    assert not hasattr(SingletonClass4, 'non_existing_attribute')
     assert not hasattr(instance, 'non_existing_attribute')
     assert not hasattr(self1, 'non_existing_attribute')
     assert not hasattr(self2, 'non_existing_attribute')
@@ -755,10 +761,10 @@ def test_get_self():
     assert not hasattr(self4, 'non_existing_attribute')
 
     # Remove the singleton
-    SingletonClass3.delete()
+    SingletonClass4.delete()
 
     # Initialise with get self with default value
-    self5 = SingletonClass3.get_self()
+    self5 = SingletonClass4.get_self()
     assert self5 is not instance
     assert self5 is not self1
     assert self5 is not self2
@@ -772,10 +778,10 @@ def test_get_self():
     assert self5.value == 19
 
     # Remove the singleton
-    SingletonClass3.delete()
+    SingletonClass4.delete()
 
     # Initialise with get self with specific value
-    self6 = SingletonClass3.get_self(value=-3)
+    self6 = SingletonClass4.get_self(value=-3)
     assert self6 is not instance
     assert self6 is not self1
     assert self6 is not self2
@@ -793,14 +799,14 @@ def test_get_self():
 
 def test_get_self_with_inheritance():
     @singleton
-    class SingletonClass4:
+    class SingletonClass5:
         def __init__(self, value=0.2):
             self.value = value
 
 
 def test_singleton_with_custom_new_and_init():
     @singleton
-    class SingletonClass5:
+    class SingletonClass6:
         def __init__(self, value='YASSS'):
             self.value = value
 
