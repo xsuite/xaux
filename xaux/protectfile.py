@@ -1,8 +1,10 @@
-"""
-This package is an attempt to make file reading/writing (possibly concurrent) more reliable.
+# copyright ############################### #
+# This file is part of the Xaux Package.    #
+# Copyright (c) CERN, 2024.                 #
+# ######################################### #
 
-Last update 28/10/2024 - T. Pugnat and F.F. Van der Veken
-"""
+# Last update 28/10/2024 - T. Pugnat and F.F. Van der Veken
+
 import sys
 import atexit
 import signal
