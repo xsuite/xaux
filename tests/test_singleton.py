@@ -1268,7 +1268,7 @@ def test_singleton_docstring():
             """SingletonClass8 __getattribute__ docstring test"""
             return super().__getattribute__(name)
 
-    assert singleton.__doc__.startswith("Singleton decorator.\n    This decorator will redefine")
+    assert singleton.__doc__.startswith("Singleton decorator.")
     assert SingletonClass8.__doc__ == "SingletonClass8 docstring test"
     assert SingletonClass8.__new__.__doc__ == "SingletonClass8 __new__ docstring test"
     assert SingletonClass8.__init__.__doc__ == "SingletonClass8 __init__ docstring test"

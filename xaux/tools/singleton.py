@@ -3,8 +3,8 @@
 # Copyright (c) CERN, 2025.                 #
 # ######################################### #
 
+import sys
 import functools
-from pathlib import Path
 
 from .function_tools import count_required_arguments
 
@@ -46,7 +46,10 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
             if '_singleton_instance' not in this_cls.__dict__:
                 if original_new:
                     # This NEEDS to call 'this_cls' instead of 'cls' to avoid always spawning a cls instance
-                    inst = original_new(this_cls, *args, **kwargs)
+                    if sys.version_info >= (3, 10):
+                        inst = original_new(this_cls, *args, **kwargs)
+                    else:
+                        inst = original_new.__func__(this_cls, *args, **kwargs)
                 else:
                     try:
                         inst = super(cls, cls).__new__(this_cls, *args, **kwargs)
