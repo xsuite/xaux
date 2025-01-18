@@ -1038,7 +1038,7 @@ def test_singleton_with_custom_dunder():
     class SingletonClass4:
         def __new__(cls, *args, **kwargs):
             print("In SingletonClass4 __new__")
-            instance = super(cls, cls).__new__(cls)
+            instance = super().__new__(cls)
             instance.test_var_new = 1
             return instance
 
@@ -1060,7 +1060,7 @@ def test_singleton_with_custom_dunder():
     class SingletonClass7:
         def __new__(cls, *args, **kwargs):
             print("In SingletonClass7 __new__")
-            instance = super(cls, cls).__new__(cls)
+            instance = super().__new__(cls)
             instance.test_var_new = 2
             return instance
 
@@ -1166,7 +1166,7 @@ def test_singleton_with_custom_dunder_with_inheritance():
     class SingletonParent5:
         def __new__(cls, *args, **kwargs):
             print("In SingletonParent5 __new__")
-            instance = super().__new__(cls, *args, **kwargs)
+            instance = super().__new__(cls)
             print(f"In SingletonParent5 __new__ {cls=}  {type(instance)=}")
             instance.test_var_new = 3
             return instance
@@ -1257,7 +1257,7 @@ def test_singleton_docstring():
 
         def __new__(cls, *args, **kwargs):
             """SingletonClass8 __new__ docstring test"""
-            instance = super(cls, cls).__new__(cls)
+            instance = super().__new__(cls)
             return instance
 
         def __init__(self, value='YASSS'):
