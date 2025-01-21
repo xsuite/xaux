@@ -240,16 +240,20 @@ class JobManager:
         self._output_directory = Path(path).resolve()
 
     @property
-    def job_input_directory(self):
-        return self.work_directory / 'job_specific_input'
-
-    @property
     def metafile(self):
         return self.work_directory / self._name + '.meta.json'
 
     @property
     def job_management_file(self):
         return self.work_directory / self._name + '.jobs.json'
+
+    @property
+    def job_input_directory(self):
+        return self.work_directory / 'job_specific_input'
+
+    @property
+    def job_management_directory(self):
+        return self.work_directory / 'job_management_directory'
 
     def to_dict(self):
         return {'name': self._name, 'work_directory': str(self.work_directory),
@@ -301,8 +305,15 @@ class JobManager:
         self._job_list = {**self._job_list,**new_jobs} 
         self.save_job_list()
 
-
     def _job_creation(self, job_name, job_description) -> list:
+        if isinstance(job_description['inputfiles']['line'], (xt.Line, xt.MultiLine)):
+            line = job_description['inputfiles']['line'].to_dict()
+            filename = f"{self._name}.line.{job_name}.json"
+            if not self.job_input_directory.exists():
+                self.job_input_directory.mkdir(parents=True)
+            with open(self.job_input_directory / filename, 'wb') as pf:
+                json.dump(line, pf, cls=xo.JEncoder, indent=True)
+            job_description['inputfiles']['line'] = str(self.job_input_directory / filename)
         if 'nbsubdivision' in job_description['parameters']:
             nbsubdivision = job_description['parameters'].get('nbsubdivision')
             if 'particles' in job_description and 'nbparticles' in job_description['parameters']:
@@ -366,6 +377,28 @@ class JobManager:
             self.job_input_directory.mkdir(parents=True)
         with open(self.job_input_directory / filename, 'wb') as pf:
             particles.to_parquet(pf, index=True, engine="pyarrow")
+
+    def submit(self, platform='htcondor', **kwargs):
+        if platform == 'htcondor':
+            self._submit_htcondor(**kwargs)
+        elif platform == 'boinc':
+            self._submit_boinc(**kwargs)
+        else:
+            raise ValueError("Invalid platform!")
+
+    def _submit_htcondor(self, job_list=None, **kwargs):
+        if job_list is None:
+            job_list = self._job_list.keys()
+        # Check if the job is already submitted
+        job_list = [job_name for job_name in job_list if not self._job_list[job_name][3]]
+        if len(job_list) != 0 and not self.job_management_directory.exists():
+            self.job_management_directory.mkdir(parents=True)
+        for job_name in job_list:
+            job_description = self._job_list[job_name][2]
+        raise NotImplementedError("HTCONDOR submission not implemented yet!")
+
+    def _submit_boinc(self, **kwargs):
+        raise NotImplementedError("BOINC submission not implemented yet!")
         
 
 
