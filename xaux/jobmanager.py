@@ -3,9 +3,9 @@ import sys
 import os
 from pathlib import Path
 
+import xobjects as xo
 import xtrack as xt
 import xpart as xp
-import xobjects as xo
 
 
 class JobTemplate:
@@ -17,16 +17,7 @@ class JobTemplate:
 
     def __init__(self, **kwargs):
         self._context = kwargs.get("_context", None)
-        line = kwargs.get("line", None)
-        if isinstance(line, (xt.Line,xt.MultiLine,xt.Environment)):
-            self._line = line
-        elif isinstance(line, (str, Path)):
-            line = Path(line)
-            if not line.exists():
-                raise ValueError(f"Line file {line} does not exist!")
-            self._line = xt.Line.from_json(line, _context=self._context)
-        elif line is not None:
-            raise ValueError(f"Invalid line type {type(line)}")
+        self.loading_line(**kwargs)
         particles = kwargs.get("particles", None)
         if isinstance(particles, xt.Particles):
             self._particles = particles
@@ -34,12 +25,31 @@ class JobTemplate:
             particles = Path(particles)
             if not particles.exists():
                 raise ValueError(f"particles file {particles} does not exist!")
-            with open(particles, 'r') as fid:
-                self._particles= xp.Particles.from_dict(json.load(fid), _context=self._context)
+            if particles.suffix == '.json':
+                with open(particles, 'r') as fid:
+                    self._particles= xp.Particles.from_dict(json.load(fid), _context=self._context)
+            elif particles.suffix == '.parquet':
+                import pandas as pd
+                with open(particles, 'rb') as fid:
+                    self._particles = xp.Particles.from_pandas(pd.read_parquet(fid, engine="pyarrow"), _context=self._context)
+            else:
+                raise ValueError(f"Invalid particles file extension {particles.suffix}!")
         elif particles is not None:
             raise ValueError(f"Invalid particles type {type(particles)}")
         if hasattr(self, 'validate_kwargs'):
             self.validate_kwargs(**kwargs)
+
+    def loading_line(self,**kwargs):
+        line = kwargs.get("line", None)
+        if isinstance(line, (str, Path)):
+            line = Path(line)
+            if not line.exists():
+                raise ValueError(f"Line file {line} does not exist!")
+            self._line = xt.Line.from_json(line, _context=self._context)
+        elif isinstance(line, (xt.Line,xt.MultiLine,xt.Environment)):
+            self._line = line
+        elif line is not None:
+            raise ValueError(f"Invalid line type {type(line)}")
 
     @property
     def line(self):
@@ -80,14 +90,40 @@ class JobTemplate:
             raise ValueError(f"Output file {output_file} already exists!")
         if not output_file.parent.exists():
             output_file.parent.mkdir(parents=True)
-        with open(output_file, 'w') as fid:
-            json.dump(self.particles.to_dict(), fid, cls=xo.JEncoder)
+        if output_file.suffix == '.json':
+            with open(output_file, 'w') as fid:
+                json.dump(self.particles.to_dict(), fid, cls=xo.JEncoder)
+        elif output_file.suffix == '.parquet':
+            with open(output_file, 'wb') as pf:
+                self.particles.to_parquet(pf, index=True, engine="pyarrow")
 
 
 
 # Job template for Dynamic Aperture analysis
 # ==========================================================================================
-DAJob = JobTemplate
+class DAJob(JobTemplate):
+    def loading_line(self, **kwargs):
+        if 'seed' in kwargs:
+            seed = kwargs.get("seed")
+            line = kwargs.get("line", None)
+            if isinstance(line, (str, Path)):
+                line = Path(line)
+                if not line.exists():
+                    raise ValueError(f"Line file {line} does not exist!")
+                with open(line, 'r') as fid:
+                    line = json.load(fid)
+                self._line = xt.Line.from_dict(line[seed])
+            elif isinstance(line, dict):
+                if isinstance(line[seed], dict):
+                    self._line = xt.Line.from_dict(line[seed])
+                elif isinstance(line[seed], (xt.Line, xt.MultiLine, xt.Environment)):
+                    self._line = line[seed]
+                else:
+                    raise ValueError(f"Invalid seed line type {type(line['seed'])} for seed {seed}!")
+            elif line is not None:
+                raise ValueError(f"Invalid line type {type(line)}")
+        else :
+            super().loading_line(**kwargs)
 
 
 
@@ -155,8 +191,8 @@ class JobManager:
     job_class = JobTemplate
     def __init__(self, *arg, **kwargs):
         """
-        This Class manages a list of jobs for tacking to be executed in parallel and their submission to HTCONDOR. This 
-        class can be loaded from a metadata file or created from scratch using the following parameters.
+        This Class manages a list of jobs for tacking to be executed in parallel and their submission to HTCONDOR and BOINC.
+        It can be loaded from its metadata file or created from scratch using the following parameters.
 
         Parameters
         ----------
@@ -198,6 +234,9 @@ class JobManager:
         else:
             self._job_class_name = self._job_class.__name__
             self._job_class_script = os.path.abspath(sys.modules[self._job_class.__module__].__file__)
+            # Import the job class
+            from importlib import import_module
+            self._job_class = import_module(self._job_class_script, package=self._job_class_name)
         if "job_class" not in kwargs and "job_class_name" in kwargs and "job_class_script" in kwargs:
             self._job_class_name = kwargs["job_class_name"]
             self._job_class_script = kwargs.get("job_class_script")
@@ -259,6 +298,13 @@ class JobManager:
         return {'name': self._name, 'work_directory': str(self.work_directory),
                 'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 
                 'job_class_name': self._job_class_name, 'job_class_script': self._job_class_script}
+    
+    def from_dict(self, metadata):
+        for kk, vv in metadata.items():
+            setattr(self, "_"+kk, vv)
+        # Import the job class
+        from importlib import import_module
+        self._job_class = import_module(self._job_class_script, package=self._job_class_name)
 
     def save_metadata(self):
         if not self.job_management_directory.exists():
@@ -269,8 +315,7 @@ class JobManager:
     def read_metadata(self, filename):
         with open(filename, 'r') as fid:
             metadata = json.load(fid)
-        for kk, vv in metadata.items():
-            setattr(self, "_"+kk, vv)
+        self.from_dict(metadata)
 
     def save_job_list(self):
         with open(self.job_management_file, 'w') as fid:
@@ -285,28 +330,36 @@ class JobManager:
 
     def add(self, *arg, **kwargs):
         self.load_job_list()
-        process_job_name = False
+        process_job_name = False # True if job description is provided directly as a dictionary in kwargs or as a list of dictionaries in arg
+        # If job description is provided as a list of dictionaries in arg
         if len(arg) != 0:
-            if len(arg) == 1 and isinstance(arg[0], dict) and len(kwargs) == 0:
-                kwargs = arg[0]
-            else:
-                raise ValueError("Invalid arguments!")
+            ii0=len(self._job_list)+len(kwargs)
+            for ii,job_description in enumerate(arg):
+                if isinstance(job_description, dict):
+                    kwargs[f"job{ii+ii0}"] = job_description
+                else:
+                    raise ValueError(f"Invalid description for job {ii}!")
+        # If job description is provided directly as a dictionary in kwargs
         if any([kk in kwargs for kk in ['inputfiles', 'particles', 'parameters', 'outputfiles']]):
             kwargs = {f"job{len(self._job_list)}": kwargs}
             process_job_name = True
+        # Check if jobs description is correct
         for kk,job_description in kwargs.items():
             if any([kkjob not in ['inputfiles', 'particles', 'parameters', 'outputfiles'] for kkjob in job_description]):
                 if process_job_name:
                     raise ValueError("Wrong job description!")
                 else:
                     raise ValueError(f"Wrong description for job {kk}!")
+        # Create the new jobs
         new_jobs_list = [self._job_creation(kk,job_description) for kk,job_description in kwargs.items()]
+        # Add the new jobs to the job list
         new_jobs = {val[0]:[val[1],val[2],val[3],val[4]] for new_job_list in new_jobs_list for val in new_job_list}
         self._job_list = {**self._job_list,**new_jobs} 
         self.save_job_list()
 
     def _job_creation(self, job_name, job_description) -> list:
-        if isinstance(job_description['inputfiles']['line'], (xt.Line, xt.MultiLine)):
+        # Check if the line is a xobjects object and save it into a file
+        if 'line' in job_description['inputfiles'] and isinstance(job_description['inputfiles']['line'], (xt.Line, xt.MultiLine)):
             line = job_description['inputfiles']['line'].to_dict()
             filename = f"{self._name}.line.{job_name}.json"
             if not self.job_input_directory.exists():
@@ -314,69 +367,72 @@ class JobManager:
             with open(self.job_input_directory / filename, 'wb') as pf:
                 json.dump(line, pf, cls=xo.JEncoder, indent=True)
             job_description['inputfiles']['line'] = str(self.job_input_directory / filename)
-        if 'nbsubdivision' in job_description['parameters']:
-            nbsubdivision = job_description['parameters'].get('nbsubdivision')
-            if 'particles' in job_description and 'nbparticles' in job_description['parameters']:
-                raise ValueError("Both 'particles' and 'nbparticles' cannot be used together!")
-            if 'particles' in job_description:
-                particles = job_description.pop('particles')
-                if isinstance(job_description['particles'], xp.Particles):
-                    particles = job_description['particles'].to_pandas()
-                elif isinstance(job_description['particles'], pd.DataFrame):
-                    particles = job_description['particles']
-                if isinstance(job_description['particles'],Path) or isinstance(job_description['particles'],str):
-                    import pandas as pd
-                    with open(job_description['particles'], 'rb') as pf:
-                        particles = pd.read_parquet(pf, engine="pyarrow")
-                if 'particle_id' not in particles.columns:
-                    particles['particle_id'] = particles.index
-                nbparticles_per_subdivision = len(particles) // nbsubdivision
-                new_list_jobs = [None for ii in range(nbsubdivision)]
-                for ii in range(nbsubdivision):
-                    job_name_sub = f"{job_name}_sub{ii}"
-                    particles_sub = particles.iloc[ii*nbparticles_per_subdivision:(ii+1)*nbparticles_per_subdivision]
-                    particles_filename = f"{self._name}.particles.{job_name_sub}.parquet"
-                    self._make_particles_file(particles_filename, particles_sub)
-                    new_list_jobs[ii] = [job_name_sub, job_name, job_description.copy(), False, False]
-                    new_list_jobs[ii][2]['particles'] = str(self.job_input_directory / particles_filename)
-            elif 'nbparticles' in job_description['parameters']:
-                nbparticles = job_description['parameters'].get('nbparticles')
-                nbparticles_per_subdivision = nbparticles // nbsubdivision
-                new_list_jobs = [None for ii in range(nbsubdivision)]
-                for ii in range(nbsubdivision):
-                    job_name_sub = f"{job_name}_sub{ii}"
-                    new_list_jobs[ii] = [job_name_sub, job_name, job_description.copy(), False, False]
-                    if nbparticles_per_subdivision*(ii+1) > nbparticles:
-                        new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles - nbparticles_per_subdivision*ii
-                    else:
-                        new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles_per_subdivision
-            else:
-                new_list_jobs = [None for ii in range(nbsubdivision)]
-                for ii in range(nbsubdivision):
-                    job_name_sub = f"{job_name}_sub{ii}"
-                    new_list_jobs[ii] = [job_name_sub, job_name, job_description.copy(), False, False]
-                    if nbparticles_per_subdivision*(ii+1) > nbparticles:
-                        new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles - nbparticles_per_subdivision*ii
-                    else:
-                        new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles_per_subdivision
-            return new_list_jobs
-        else:
-            if 'particles' in job_description:
-                if isinstance(job_description['particles'], xp.Particles):
-                    particles = job_description['particles'].to_pandas()
-                    particles_filename = f"{self._name}.particles.{job_name}.parquet"
-                    self._make_particles_file(particles_filename, particles)
-                elif isinstance(job_description['particles'], pd.DataFrame):
-                    particles_filename = f"{self._name}.particles.{job_name}.parquet"
-                    self._make_particles_file(particles_filename, job_description['particles'])
-                    job_description['particles'] = str(self.job_input_directory / particles_filename)
-            return [[job_name, job_name, job_description, False, False]]
+        # if 'nbsubdivision' in job_description['parameters']:
+        #     nbsubdivision = job_description['parameters'].get('nbsubdivision')
+        #     if 'particles' in job_description and 'nbparticles' in job_description['parameters']:
+        #         raise ValueError("Both 'particles' and 'nbparticles' cannot be used together!")
+        #     if 'particles' in job_description:
+        #         particles = job_description.pop('particles')
+        #         if isinstance(job_description['particles'], xp.Particles):
+        #             particles = job_description['particles'].to_pandas()
+        #         elif isinstance(job_description['particles'], pd.DataFrame):
+        #             particles = job_description['particles']
+        #         if isinstance(job_description['particles'],Path) or isinstance(job_description['particles'],str):
+        #             import pandas as pd
+        #             with open(job_description['particles'], 'rb') as pf:
+        #                 particles = pd.read_parquet(pf, engine="pyarrow")
+        #         if 'particle_id' not in particles.columns:
+        #             particles['particle_id'] = particles.index
+        #         nbparticles_per_subdivision = len(particles) // nbsubdivision
+        #         new_list_jobs = [None for ii in range(nbsubdivision)]
+        #         for ii in range(nbsubdivision):
+        #             job_name_sub = f"{job_name}_sub{ii}"
+        #             particles_sub = particles.iloc[ii*nbparticles_per_subdivision:(ii+1)*nbparticles_per_subdivision]
+        #             particles_filename = f"{self._name}.particles.{job_name_sub}.parquet"
+        #             self._make_particles_file(particles_filename, particles_sub)
+        #             new_list_jobs[ii] = [job_name_sub, job_name, job_description.copy(), False, False]
+        #             new_list_jobs[ii][2]['particles'] = str(self.job_input_directory / particles_filename)
+        #     elif 'nbparticles' in job_description['parameters']:
+        #         nbparticles = job_description['parameters'].get('nbparticles')
+        #         nbparticles_per_subdivision = nbparticles // nbsubdivision
+        #         new_list_jobs = [None for ii in range(nbsubdivision)]
+        #         for ii in range(nbsubdivision):
+        #             job_name_sub = f"{job_name}_sub{ii}"
+        #             new_list_jobs[ii] = [job_name_sub, job_name, job_description.copy(), False, False]
+        #             if nbparticles_per_subdivision*(ii+1) > nbparticles:
+        #                 new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles - nbparticles_per_subdivision*ii
+        #             else:
+        #                 new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles_per_subdivision
+        #     else:
+        #         new_list_jobs = [None for ii in range(nbsubdivision)]
+        #         for ii in range(nbsubdivision):
+        #             job_name_sub = f"{job_name}_sub{ii}"
+        #             new_list_jobs[ii] = [job_name_sub, job_name, job_description.copy(), False, False]
+        #             if nbparticles_per_subdivision*(ii+1) > nbparticles:
+        #                 new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles - nbparticles_per_subdivision*ii
+        #             else:
+        #                 new_list_jobs[ii][2]['parameters']['nbparticles'] = nbparticles_per_subdivision
+        #     return new_list_jobs
+        # else:
+        # Check if the particles are a xobjects object or a pandas DataFrame and save it into a file
+        if 'particles' in job_description:
+            import pandas as pd
+            if isinstance(job_description['particles'], xp.Particles):
+                particles = job_description['particles'].to_pandas()
+                particles_filename = f"{self._name}-{job_name}.particles.parquet"
+                job_description['particles'] = str(self._make_particles_file(particles_filename, particles))
+            elif isinstance(job_description['particles'], pd.DataFrame):
+                particles = job_description['particles']
+                particles_filename = f"{self._name}-{job_name}.particles.parquet"
+                job_description['particles'] = str(self._make_particles_file(particles_filename, particles))
+        return [[job_name, job_name, job_description, False, False]]
 
     def _make_particles_file(self, filename, particles):
         if not self.job_input_directory.exists():
             self.job_input_directory.mkdir(parents=True)
         with open(self.job_input_directory / filename, 'wb') as pf:
             particles.to_parquet(pf, index=True, engine="pyarrow")
+        return self.job_input_directory / filename
 
     def submit(self, platform='htcondor', **kwargs):
         if platform == 'htcondor':
@@ -384,9 +440,13 @@ class JobManager:
         elif platform == 'boinc':
             self._submit_boinc(**kwargs)
         else:
-            raise ValueError("Invalid platform!")
+            raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
     def _submit_htcondor(self, job_list=None, **kwargs):
+        import xdeps as xd
+        import xfields as xf
+        if 'xcoll' in sys.modules:
+            import xcoll as xc
         if job_list is None:
             job_list = self._job_list.keys()
         # Check if the job is already submitted
@@ -395,6 +455,57 @@ class JobManager:
             self.job_management_directory.mkdir(parents=True)
         for job_name in job_list:
             job_description = self._job_list[job_name][2]
+            # Creation of htcondor executable file
+            executable_file = self.job_management_directory / f"{self._name}-{job_name}.htcondor.sh"
+            with open(executable_file, 'w') as fid:
+                fid.write(f"#!/bin/bash\n\nset --\n\n")
+                fid.write(f"sleep 60\n\n")
+                # Load python environment
+                fid.write(f"source /cvmfs/sft.cern.ch/lcg/views/LCG_106/x86_64-el9-gcc13-opt/setup.sh\n")
+                fid.write(f"retVal=$?\n")
+                fid.write(f"if [ $retVal -ne 0 ]\n")
+                fid.write(f"then\n")
+                fid.write(f'    echo "Failed to source LCG_106" # Catch source error to avoid endless loop\n')
+                fid.write(f"    exit $retVal\n")
+                fid.write(f"fi\n\n")
+                # Copy Xsuite classes locally
+                for xclass in [xo, xd, xt, xp, xf]:
+                    fid.write(f"cp -r {str(Path(xclass.__file__).parent)} .\n")  # Copy of main xobjects
+                fid.write(f"cp -r {str(Path(JobTemplate.__file__).parent)} .\n") # Copy of xaux
+                if 'xcoll' in sys.modules:
+                    fid.write(f"cp -r {str(Path(xc.__file__).parent)} .\n")      # Copy of xcoll if exists
+                # Check local copy of the job input files
+                fid.write('echo "uname -r:" `uname -r\n')
+                fid.write('python --version\n')
+                fid.write('echo "which python:" `which python`\n')
+                fid.write('echo "ls:"\n')
+                fid.write('ls\n')
+                fid.write('echo\n')
+                fid.write('echo $( date )"    Running lossmap study ${studyname} job ${jobid}."\n')
+                fid.write('echo\n')
+                # Create python argument for input files
+                linputfile_key  = job_description['inputfiles'].keys()
+                linputfile_path = job_description['inputfiles'].values()
+                linputfile_name = [Path(vv).name for vv in linputfile_path]
+                job_args = ' '.join([f"{kk}={nn}" for kk,nn in zip(linputfile_key,linputfile_name)])
+                if 'particles' in job_description:
+                    # Add particles to python argument
+                    job_args += f" particles={Path(job_description['particles']).name}"
+                if 'parameters' in job_description:
+                    # Add parameters to python argument
+                    job_args += ' '+' '.join([f"{kk}={vv}" for kk,vv in job_description['parameters'].items()])
+                if 'outputfiles' in job_description:
+                    # Add output files to python argument
+                    job_args += ' '+' '.join([f"{kk}={str(Path(vv).name)}" for kk,vv in job_description['outputfiles'].items()])
+                # Execute python script
+                fid.write(f"\npython xaux/jobmanager.py {self._job_class_name} {self._job_class_script} {job_args}\n")
+        # Create main htcondor submission file
+        with open(self.job_management_directory / f"{self._name}.htcondor.submit", 'w') as fid:
+            fid.write(f"executable = {self.job_management_directory}/$(jobname).htcondor.sh\n")
+            fid.write(f"output = $(jobname).htcondor.out\n")
+            fid.write(f"error = $(jobname).htcondor.err\n")
+            fid.write(f"log = $(jobname).htcondor.log\n")
+            fid.write(f"queue\n")
         raise NotImplementedError("HTCONDOR submission not implemented yet!")
 
     def _submit_boinc(self, **kwargs):
@@ -407,7 +518,21 @@ arg = {
     'job1': {'inputfiles':{'line': "line.json", 'colldb': "colldb.yaml"}, "parameters":{'num_particles': 50000,'lmtype': "B1H", 'num_turns': 200}},
     'job2': {'inputfiles':{'line': "line.json", 'colldb': "colldb.yaml"}, "parameters":{'num_particles': 50000,'lmtype': "B1H", 'num_turns': 200}},
 }
-            
+
+
+
+
+def main(job_class_name, job_class_script, **arg):
+        from importlib import import_module
+        import time
+        start_time = time.time()
+        import xdeps as xd
+        import xfields as xf
+        if 'xcoll' in sys.modules:
+            import xcoll as xc
+        job_class = import_module(job_class_script, package=job_class_name)
+        job_class.run(**arg)
+        print(f"Total calculation time {time.time()-start_time:.2f}s")
 
 
 
@@ -417,4 +542,11 @@ if __name__ == '__main__':
     print(f"{os.path.abspath(sys.modules[DAJob.__module__].__file__)=}")
     print(f"{xt.Line.__name__=}")
     print(f"{os.path.abspath(sys.modules[xt.Line.__module__].__file__)=}")
+    print(f"{str(Path(xt.__file__).parent)=}")
     print("end")
+
+    # # Executable for the job class
+    # main(sys.argv[1], # job_class_name 
+    #      sys.argv[2], # job_class_script
+    #      **dict(arg.split('=') for arg in sys.argv[3:]) # job arguments
+    #      )
