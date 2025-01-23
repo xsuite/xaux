@@ -447,6 +447,10 @@ class JobManager:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
     def _submit_htcondor(self, job_list=None, **kwargs):
+        if 'Step' in kwargs:
+            raise NotImplementedError("Step management not implemented yet!")
+            self._step = kwargs.pop('Step')
+            self.save_metadata()
         import xdeps as xd
         import xfields as xf
         if 'xcoll' in sys.modules:
@@ -534,20 +538,6 @@ class JobManager:
             fid.write('echo\n')
             fid.write('echo $( date )"    Running lossmap study ${studyname} job ${jobid}."\n')
             fid.write('echo\n')
-            # # Create python argument for input files
-            # linputfile_key  = job_description['inputfiles'].keys()
-            # linputfile_path = job_description['inputfiles'].values()
-            # linputfile_name = [Path(vv).name for vv in linputfile_path]
-            # job_args = ' '.join([f"{kk}={nn}" for kk,nn in zip(linputfile_key,linputfile_name)])
-            # if 'particles' in job_description:
-            #     # Add particles to python argument
-            #     job_args += f" particles={Path(job_description['particles']).name}"
-            # if 'parameters' in job_description:
-            #     # Add parameters to python argument
-            #     job_args += ' '+' '.join([f"{kk}={vv}" for kk,vv in job_description['parameters'].items()])
-            # if 'outputfiles' in job_description:
-            #     # Add output files to python argument
-            #     job_args += ' '+' '.join([f"{kk}={str(Path(vv).name)}" for kk,vv in job_description['outputfiles'].items()])
             # List arguments for the python script
             print(f"{larguments=}")
             print(f"{luniqueargs=}")
@@ -559,10 +549,11 @@ class JobManager:
 
         # Create main htcondor submission file
         with open(self.work_directory / f"{self._name}.htcondor.sub", 'w') as fid:
-            fid.write(f"executable = {self.work_directory}/$(jobname).htcondor.sh\n")
-            fid.write(f"output = $(jobname).htcondor.out\n")
-            fid.write(f"error = $(jobname).htcondor.err\n")
-            fid.write(f"log = $(jobname).htcondor.log\n")
+            fid.write(f"universe = {kwargs.pop('universe','vanilla')}\n")
+            fid.write(f"executable = {self.work_directory}/{self._name}.htcondor.sh\n")
+            fid.write(f"output = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).out\n")
+            fid.write(f"error = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).err\n")
+            fid.write(f"log = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).log\n")
             fid.write(f"should_transfer_files = YES\n")
             linputs = ''
             if len(luniqueargs)!=0:
@@ -585,6 +576,8 @@ class JobManager:
 
             if len(lmuliargs)!=0:
                 fid.write(f"arguments = $(job_name) $({') $('.join([kk for kk in lmuliargs])})\n")
+                for kk,vv in kwargs.items():
+                    fid.write(f"+{kk} = {vv}\n")
                 fid.write(f"queue job_name, {', '.join(lmuliargs)} from (\n")
                 for job_name in job_list:
                     fid.write(f"    {job_name}")
@@ -621,7 +614,10 @@ arg = {
     'job2': {'inputfiles':{'line': "line.json", 'colldb': "colldb.yaml"}, "parameters":{'num_particles': 50000,'lmtype': "B1H", 'num_turns': 200}},
 }
 
-
+# https://htcondor.readthedocs.io/en/latest/users-manual/submitting-a-job.html
+# https://htcondor.readthedocs.io/en/latest/users-manual/file-transfer.html
+# https://htcondor.readthedocs.io/en/latest/
+# https://htcondor.readthedocs.io/en/latest/man-pages/condor_submit.html
 
 
 def main(job_class_name, job_class_script, **arg):
