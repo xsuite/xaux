@@ -447,10 +447,15 @@ class JobManager:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
     def _submit_htcondor(self, job_list=None, **kwargs):
+        # Check kwargs
         if 'Step' in kwargs:
             raise NotImplementedError("Step management not implemented yet!")
             self._step = kwargs.pop('Step')
             self.save_metadata()
+        if 'JobFlavor' not in kwargs:
+            kwargs['JobFlavor'] = 'tomorrow'
+        if 'AccountingGroup' not in kwargs:
+            kwargs['AccountingGroup'] = "group_u_BE.ABP.normal"
         import xdeps as xd
         import xfields as xf
         if 'xcoll' in sys.modules:
@@ -549,35 +554,42 @@ class JobManager:
 
         # Create main htcondor submission file
         with open(self.work_directory / f"{self._name}.htcondor.sub", 'w') as fid:
-            fid.write(f"universe = {kwargs.pop('universe','vanilla')}\n")
+            # Set general parameters
+            fid.write(f"universe   = {kwargs.pop('universe','vanilla')}\n")
             fid.write(f"executable = {self.work_directory}/{self._name}.htcondor.sh\n")
-            fid.write(f"output = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).out\n")
-            fid.write(f"error = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).err\n")
-            fid.write(f"log = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).log\n")
-            fid.write(f"should_transfer_files = YES\n")
+            fid.write(f"output     = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).out\n")
+            fid.write(f"error      = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).err\n")
+            fid.write(f"log        = {self.job_management_directory}/Job$(Process)/{self._name}.htcondor.$(Process).log\n")
+            # Set additional parameters
+            for kk,vv in kwargs.items():
+                fid.write(f"+{kk} = \"{vv}\"\n")
+            # Set input files transfer
+            fid.write(f"should_transfer_files   = YES\n")
             linputs = ''
             if len(luniqueargs)!=0:
                 linputs += ','.join([vv for kk,vv in luniqueargs.items() if kk in self._job_list[jn0][0]['inputfiles']])
             if len(lmuliargs)!=0:
                 linputs += '$('+'),$('.join([kk for kk in lmuliargs if kk in self._job_list[jn0][0]['inputfiles']])+')'
-            fid.write(f"transfer_input_files = {linputs}\n")
+            fid.write(f"transfer_input_files    = {linputs}\n")
+            # Set output files transfer
             loutputs = ''
             if 'outputfiles' in self._job_list[jn0][0]:
                 if len(luniqueargs)!=0:
                     for kk,vv in luniqueargs.items():
                         if kk in self._job_list[jn0][0]['outputfiles']:
                             vv = Path(vv)
-                            vv = vv.parent / (vv.stem+'.$(job_name).'+vv.suffix)
+                            vv = vv.parent / (vv.stem+'.$(job_name)'+vv.suffix)
                             loutputs += f"{vv},"
-                if len(lmuliargs)!=0:
+                        loutputs = loutputs[:-1]
+                if any([kk in lmuliargs for kk in self._job_list[jn0][0]['outputfiles']]):
                     loutputs += '$('+'),$('.join([kk for kk in lmuliargs if kk in self._job_list[jn0][0]['outputfiles']])+')'
-                fid.write(f"transfer_output_files = {loutputs}\n")
+                fid.write(f"transfer_output_files   = {loutputs}\n")
                 fid.write(f"when_to_transfer_output = ON_EXIT\n")
 
             if len(lmuliargs)!=0:
-                fid.write(f"arguments = $(job_name) $({') $('.join([kk for kk in lmuliargs])})\n")
-                for kk,vv in kwargs.items():
-                    fid.write(f"+{kk} = {vv}\n")
+                # Set list arguments to feed the script
+                fid.write(f"arguments = $({') $('.join([kk for kk in lmuliargs])})\n")
+                # Add queue description
                 fid.write(f"queue job_name, {', '.join(lmuliargs)} from (\n")
                 for job_name in job_list:
                     fid.write(f"    {job_name}")
@@ -595,7 +607,7 @@ class JobManager:
                                 fid.write(f" {self._job_list[job_name][0]['outputfiles'][kk]}")
                             else:
                                 vv = Path(self._job_list[job_name][0]['outputfiles'][kk])
-                                vv = vv.parent / (vv.stem+'.$(job_name).'+vv.suffix)
+                                vv = vv.parent / (vv.stem+f'.{job_name}'+vv.suffix)
                                 fid.write(f" {vv}")
                     fid.write(f"\n")
                 fid.write(f")\n")
