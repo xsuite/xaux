@@ -1281,33 +1281,47 @@ def test_singleton_docstring():
 
 
 def test_singleton_structure():
-    with pytest.raises(ValueError, match=re.escape("Cannot create a singleton with an __init__ "
-                + "method that has more than one required argument (only 'self' is allowed)!")):
+    with pytest.raises(TypeError, match=re.escape("Cannot create a singleton for class SingletonClass9 "
+        + "with an __init__ method that has more than one required argument (only 'self' is allowed)!")):
         @singleton
         class SingletonClass9:
             def __init__(self, value):
                 self.value = value
 
+    with pytest.raises(TypeError, match=re.escape("Class SingletonClass10 provides a 'get_self' "
+                              + "method. This is not compatible with the singleton decorator!")):
+        @singleton
+        class SingletonClass10:
+            def get_self(self, *args, **kwargs):
+                return 20
+
+    with pytest.raises(TypeError, match=re.escape("Class SingletonClass11 provides a 'delete' "
+                            + "method. This is not compatible with the singleton decorator!")):
+        @singleton
+        class SingletonClass11:
+            def delete(self, *args, **kwargs):
+                pass
+
     @singleton(allow_underscore_vars_in_init=False)
-    class SingletonClass10:
+    class SingletonClass12:
         def __init__(self):
             self._value1 = 12
 
     @singleton
-    class SingletonClass11:
+    class SingletonClass13:
         def __init__(self, _value1=7.3, value2='hello'):
             self._value1 = _value1
             self.value2 = value2
 
-    with pytest.raises(ValueError, match=re.escape("Cannot set private attribute _value1 for "
-                + "SingletonClass10! Use the appropriate setter method instead. However, if you "
+    with pytest.raises(AttributeError, match=re.escape("Cannot set private attribute _value1 for "
+                + "SingletonClass12! Use the appropriate setter method instead. However, if you "
                 + "really want to be able to set this attribute in the constructor, use "
                 + "'allow_underscore_vars_in_init=True' in the singleton decorator.")):
-        instance = SingletonClass10(_value1=10)
-    instance2 = SingletonClass11(_value1=10)
+        instance = SingletonClass12(_value1=10)
+    instance2 = SingletonClass13(_value1=10)
 
     # Clean up
-    SingletonClass10.delete()
-    assert not hasattr(SingletonClass10, '_singleton_instance')
-    SingletonClass11.delete()
-    assert not hasattr(SingletonClass11, '_singleton_instance')
+    SingletonClass12.delete()
+    assert not hasattr(SingletonClass12, '_singleton_instance')
+    SingletonClass13.delete()
+    assert not hasattr(SingletonClass13, '_singleton_instance')

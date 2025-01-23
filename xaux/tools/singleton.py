@@ -64,25 +64,28 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
     def decorator_singleton(cls):
         # Verify any existing __init__ method only has optional values
         original_init = cls.__dict__.get('__init__')
-        if original_init and count_required_arguments(original_init) > 1:
-            raise ValueError(f"Cannot create a singleton with an __init__ method that "
-                            + "has more than one required argument (only 'self' is allowed)!")
+        if original_init is not None and count_required_arguments(original_init) > 1:
+            raise TypeError(f"Cannot create a singleton for class {cls.__name__} with an "
+                          + f"__init__ method that has more than one required argument (only "
+                          + f"'self' is allowed)!")
 
         # Check the class doesn't already have a get_self method
-        if cls.__dict__.get('get_self'):
-            raise ValueError(f"Class {cls} provides a 'get_self' method. This is not compatible "
-                            + "with the singleton decorator!")
+        if cls.__dict__.get('get_self') is not None:
+            raise TypeError(f"Class {cls.__name__} provides a 'get_self' method. This is not "
+                            + "compatible with the singleton decorator!")
 
         # Check the class doesn't already have a delete method
-        if cls.__dict__.get('delete'):
-            raise ValueError(f"Class {cls} provides a 'delete' method. This is not compatible "
-                            + "with the singleton decorator!")
+        if cls.__dict__.get('delete') is not None:
+            raise TypeError(f"Class {cls.__name__} provides a 'delete' method. This is not "
+                            + "compatible with the singleton decorator!")
 
         # Define wrapper names
-        wrap_new = cls.__new__ if cls.__dict__.get('__new__') else Singleton.__new__
-        wrap_init = cls.__init__ if cls.__dict__.get('__init__') else Singleton.__init__
+        wrap_new = cls.__new__ if cls.__dict__.get('__new__') is not None \
+                               else Singleton.__new__
+        wrap_init = cls.__init__ if cls.__dict__.get('__init__') is not None \
+                                 else Singleton.__init__
         wrap_getattribute = cls.__getattribute__ if cls.__dict__.get('__getattribute__') \
-                                                 else Singleton.__getattribute__
+                                               is not None else Singleton.__getattribute__
 
         @functools.wraps(cls, updated=())
         class LocalSingleton(cls):
@@ -109,7 +112,7 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
                 kwargs.pop('_initialised', None)
                 for kk in list(kwargs.keys()) + list(args):
                     if not allow_underscore_vars_in_init and kk.startswith('_'):
-                        raise ValueError(f"Cannot set private attribute {kk} for {this_cls.__name__}! "
+                        raise AttributeError(f"Cannot set private attribute {kk} for {this_cls.__name__}! "
                                         + "Use the appropriate setter method instead. However, if you "
                                         + "really want to be able to set this attribute in the "
                                         + "constructor, use 'allow_underscore_vars_in_init=True' "
@@ -122,15 +125,15 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
                 # are allowed
                 for kk, vv in kwargs.items():
                     if not hasattr(self, kk) and not hasattr(this_cls, kk):
-                        raise ValueError(f"Invalid attribute {kk} for {this_cls.__name__}!")
+                        raise AttributeError(f"Invalid attribute {kk} for {this_cls.__name__}!")
                     setattr(self, kk, vv)
 
-            if not cls.__dict__.get('__str__'):
+            if cls.__dict__.get('__str__') is None:
                 @functools.wraps(Singleton.__str__)
                 def __str__(self):
                     return f"<{type(self).__name__} singleton instance>"
 
-            if not cls.__dict__.get('__repr__'):
+            if cls.__dict__.get('__repr__') is None:
                 @functools.wraps(Singleton.__repr__)
                 def __repr__(self):
                     return f"<{type(self).__name__} singleton instance at {hex(id(self))}>"
@@ -141,7 +144,7 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
                 if not hasattr(this_cls, '_singleton_instance') \
                 or not super().__getattribute__('_valid'):
                     raise RuntimeError(f"This instance of the singleton {this_cls.__name__} "
-                                    + "has been invalidated!")
+                                      + "has been invalidated!")
                 return super().__getattribute__(name)
 
             @classmethod
