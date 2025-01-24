@@ -20,7 +20,15 @@ class ClassProperty:
       'classproperty' will be attached to it, providing an attribute-like
       interface to the ClassProperty attributes of a class for introspection.
       Use like ?MyClass.classproperty.my_class_property to get the introspect.
-    - _classproperty_dependencies
+    - An important caveat is that regular class attributes do not always behave
+      as expected when inherited, which might be an issue when a ClassProperty
+      uses such a regular class attribute (for instance as the private attribute
+      it is encapsulating). Indeed, when the parent has a class attribute '_prop'
+      it will not be copied unto the child, and any ClassProperty.setter applied
+      on the child will inevitably update the parent's attributes as well. To
+      handle this, one can define a dict '_classproperty_dependencies' in the
+      class to declare all dependent regular class attributes and their initial
+      values. The 'ClassPropertyMeta' then copies these attributes to the child.
 
     Example usage:
 

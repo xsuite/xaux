@@ -44,8 +44,8 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
     - Each re-initialisation of the singleton will keep the class attributes, and for this
       reason, the __init__ method should not have any required arguments. This is asserted
       at the class creation time.
-    - By default, the singleton will not allow setting private attributes in the constructor,
-      but this can be overridden by setting 'allow_underscore_vars_in_init=True'.
+    - By default, the singleton allows setting private attributes in the constructor,
+      but this can be overridden by setting 'allow_underscore_vars_in_init=False'.
     - This decorator is fully compatible with inheritance, and each child of a singleton
       class will be its own singleton.
     - The singleton can be reset by calling the 'delete()' method of the class, which will
