@@ -81,18 +81,18 @@ class ClassProperty:
         ClassProperty._registry[owner][name] = self
         # Create default getter, setter, and deleter
         if self.fget is None:
-            def _getter(*args, **kwargs):
-                raise AttributeError(f"Unreadable attribute '{name}' of {owner.__name__} "
+            def _getter(this_owner):
+                raise AttributeError(f"Unreadable attribute '{name}' of {this_owner.__name__} "
                                     + "class!")
             self._fget = _getter
         if self.fset is None:
-            def _setter(self, *args, **kwargs):
-                raise AttributeError(f"ClassProperty '{name}' of '{owner.__name__}' class "
+            def _setter(this_owner, value):
+                raise AttributeError(f"ClassProperty '{name}' of '{this_owner.__name__}' class "
                                     + "has no setter")
             self._fset = _setter
         if self.fdel is None:
-            def _deleter(*args, **kwargs):
-                raise AttributeError(f"ClassProperty '{name}' of '{owner.__name__}' class "
+            def _deleter(this_owner):
+                raise AttributeError(f"ClassProperty '{name}' of '{this_owner.__name__}' class "
                                     + "has no deleter")
             self._fdel = _deleter
         # Attach an accessor to the parent class to inspect ClassProperties
@@ -216,7 +216,10 @@ class ClassPropertyMeta(type):
                 if original_setattr is not None:
                     return original_setattr(self, key, value)
                 else:
-                    return super(this_cls, self).__setattr__(key, value)
+                    # We have to call super on new_class, i.e. the class this method is
+                    # attached to. Otherwise we will end up in infinite loops in case of
+                    # inheritance.
+                    return super(new_class, self).__setattr__(key, value)
         new_class.__setattr__ = functools.wraps(ClassPropertyMeta.__setattr__)(__setattr__)
 
         # Overwrite the __delattr__ method in the class
@@ -238,7 +241,7 @@ class ClassPropertyMeta(type):
                 if original_delattr is not None:
                     return original_delattr(self, key)
                 else:
-                    return super(this_cls, self).__delattr__(key)
+                    return super(new_class, self).__delattr__(key)
         new_class.__delattr__ = functools.wraps(ClassPropertyMeta.__delattr__)(__delattr__)
 
         # Get all dependencies that are used by the ClassProperties from the parents into the class

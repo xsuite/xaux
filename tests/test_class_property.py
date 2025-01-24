@@ -824,30 +824,24 @@ def test_structure():
                                          "metaclass to be able to use ClassProperties!")
 
 
-def _get_flags_and_names(cls, first_set_from_class, second_set_from_class):
+def _get_inherited_flag(cls, first_set_from_class, second_set_from_class):
     if first_set_from_class:
         if '__original_nonsingleton_class__' in first_set_from_class.__dict__:
-            # The ClassProperty is attached to the original class, not the singleton class
-            first_set_origin = first_set_from_class.__original_nonsingleton_class__.__name__
-            first_set_inherited = True # Properties are always inherited, from the original class
+            # Properties are always inherited, from the original class above the singleton
+            first_set_inherited = True
         else:
-            first_set_origin = first_set_from_class.__name__
             first_set_inherited = cls != first_set_from_class
     else:
-        first_set_origin = None
         first_set_inherited = False
     if second_set_from_class:
         if '__original_nonsingleton_class__' in second_set_from_class.__dict__:
-            # The ClassProperty is attached to the original class, not the singleton class
-            second_set_origin = second_set_from_class.__original_nonsingleton_class__.__name__
-            second_set_inherited = True # Properties are always inherited, from the original class
+            # Properties are always inherited, from the original class above the singleton
+            second_set_inherited = True
         else:
-            second_set_origin = second_set_from_class.__name__
             second_set_inherited = cls != second_set_from_class
     else:
-        second_set_origin = None
         second_set_inherited = False
-    return first_set_origin, first_set_inherited, second_set_origin, second_set_inherited
+    return first_set_inherited, second_set_inherited
 
 
 def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_class, is_singleton):
@@ -855,8 +849,8 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
     # that regular class attributes, properties, and regular instance attributes are not affected.
 
     # Some flags and names
-    first_set_origin, first_set_inherited, second_set_origin, second_set_inherited = \
-        _get_flags_and_names(cls, first_set_from_class, second_set_from_class)
+    first_set_inherited, second_set_inherited = \
+        _get_inherited_flag(cls, first_set_from_class, second_set_from_class)
 
     # Check singleton
     if is_singleton:
@@ -950,7 +944,7 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
     if first_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                    + f"'{first_set_origin}' class has no setter")):
+                                        + f"'{cls.__name__}' class has no setter")):
             cls.cprop1 = 7
         assert cls.cprop1 == 9
         assert cls._cprop1 == 9
@@ -966,7 +960,7 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
     if second_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                   + f"'{second_set_origin}' class has no setter")):
+                                        + f"'{cls.__name__}' class has no setter")):
             cls.cprop4 = -7
         assert cls.cprop4 == -9
         assert cls._cprop4 == -9
@@ -984,7 +978,7 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
     if first_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                   + f"'{first_set_origin}' class has no deleter")):
+                                       + f"'{cls.__name__}' class has no deleter")):
             del cls.cprop1
         assert hasattr(cls, 'cprop1')
         assert hasattr(cls, '_cprop1')
@@ -999,14 +993,14 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
             assert 'rcprop3' not in cls.__dict__
             assert cls.rcprop3 == 3  # This is the original rcprop3, inherited
             with pytest.raises(AttributeError, match=re.escape("type object "
-                            + f"'{cls.__name__}' has no attribute 'rcprop3'")):
+                                 + f"'{cls.__name__}' has no attribute 'rcprop3'")):
                 del cls.rcprop3 # Cannot delete an inherited class property
         else:
             assert not hasattr(cls, 'rcprop3')
     if second_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                   + f"'{second_set_origin}' class has no deleter")):
+                                       + f"'{cls.__name__}' class has no deleter")):
             del cls.cprop4
         assert hasattr(cls, 'cprop4')
         assert hasattr(cls, '_cprop4')
@@ -1021,7 +1015,7 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
             assert 'rcprop6' not in cls.__dict__
             assert cls.rcprop6 == -3  # This is the original rcprop6, inherited
             with pytest.raises(AttributeError, match=re.escape("type object "
-                            + f"'{cls.__name__}' has no attribute 'rcprop6'")):
+                                 + f"'{cls.__name__}' has no attribute 'rcprop6'")):
                 del cls.rcprop6 # Cannot delete an inherited class property
         else:
             assert not hasattr(cls, 'rcprop6')
@@ -1046,8 +1040,8 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
     # that regular class attributes, properties, and regular instance attributes are not affected.
 
     # Some flags and names
-    first_set_origin, first_set_inherited, second_set_origin, second_set_inherited = \
-        _get_flags_and_names(cls, first_set_from_class, second_set_from_class)
+    first_set_inherited, second_set_inherited = \
+        _get_inherited_flag(cls, first_set_from_class, second_set_from_class)
 
     # Spawn the instances
     instance1 = cls()
@@ -1208,10 +1202,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
     if first_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                    + f"'{first_set_origin}' class has no setter")):
+                                        + f"'{cls.__name__}' class has no setter")):
             instance1.cprop1 = 7
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                    + f"'{first_set_origin}' class has no setter")):
+                                        + f"'{cls.__name__}' class has no setter")):
             instance2.cprop1 = 7
         assert cls.cprop1 == 9
         assert instance1.cprop1 == 9
@@ -1243,10 +1237,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         # Regular class attributes are counterintuitive on instances; do not test
         # Then the properties (to ensure they are not affected):
         with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                   + f"'{first_set_origin}' object has no setter")):
+                                       + f"'{cls.__name__}' object has no setter")):
             instance1.prop1 = 70
         with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                   + f"'{first_set_origin}' object has no setter")):
+                                       + f"'{cls.__name__}' object has no setter")):
             instance2.prop1 = 70
         assert instance1.prop1 == 10
         assert instance2.prop1 == 10
@@ -1286,10 +1280,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
     if second_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                    + f"'{second_set_origin}' class has no setter")):
+                                        + f"'{cls.__name__}' class has no setter")):
             instance1.cprop4 = -7
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                    + f"'{second_set_origin}' class has no setter")):
+                                        + f"'{cls.__name__}' class has no setter")):
             instance2.cprop4 = -7
         assert cls.cprop4 == -9
         assert instance1.cprop4 == -9
@@ -1321,10 +1315,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         # Regular class attributes are counterintuitive on instances; do not test
         # Then the properties (to ensure they are not affected):
         with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                  + f"'{second_set_origin}' object has no setter")):
+                                       + f"'{cls.__name__}' object has no setter")):
             instance1.prop4 = -70
         with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                  + f"'{second_set_origin}' object has no setter")):
+                                       + f"'{cls.__name__}' object has no setter")):
             instance2.prop4 = -70
         assert instance1.prop4 == -10
         assert instance2.prop4 == -10
@@ -1402,10 +1396,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
     if first_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                   + f"'{first_set_origin}' class has no deleter")):
+                                       + f"'{cls.__name__}' class has no deleter")):
             del instance1.cprop1
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                   + f"'{first_set_origin}' class has no deleter")):
+                                       + f"'{cls.__name__}' class has no deleter")):
             del instance2.cprop1
         assert hasattr(cls, 'cprop1')
         assert hasattr(instance1, 'cprop1')
@@ -1467,10 +1461,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         # Regular class attributes are counterintuitive on instances; do not test
         # Then on properties (to ensure they are not affected):
         with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                  + f"'{first_set_origin}' object has no deleter")):
+                                      + f"'{cls.__name__}' object has no deleter")):
             del instance1.prop1
         with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                  + f"'{first_set_origin}' object has no deleter")):
+                                      + f"'{cls.__name__}' object has no deleter")):
             del instance2.prop1
         assert hasattr(instance1, 'prop1')
         assert hasattr(instance2, 'prop1')
@@ -1523,10 +1517,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
     if second_set_from_class:
         # First the ClassProperties:
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                   + f"'{second_set_origin}' class has no deleter")):
+                                       + f"'{cls.__name__}' class has no deleter")):
             del instance1.cprop4
         with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                   + f"'{second_set_origin}' class has no deleter")):
+                                       + f"'{cls.__name__}' class has no deleter")):
             del instance2.cprop4
         assert hasattr(cls, 'cprop4')
         assert hasattr(instance1, 'cprop4')
@@ -1534,12 +1528,12 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert hasattr(cls, '_cprop4')
         assert hasattr(instance1, '_cprop4')
         assert hasattr(instance2, '_cprop4')
-        assert cls.cprop4 == 9
-        assert instance1.cprop4 == 9
-        assert instance2.cprop4 == 9
-        assert cls._cprop4 == 9
-        assert instance1._cprop4 == 9
-        assert instance2._cprop4 == 9
+        assert cls.cprop4 == -9
+        assert instance1.cprop4 == -9
+        assert instance2.cprop4 == -9
+        assert cls._cprop4 == -9
+        assert instance1._cprop4 == -9
+        assert instance2._cprop4 == -9
         del cls.cprop5
         assert hasattr(cls, 'cprop5')
         assert hasattr(instance1, 'cprop5')
@@ -1547,14 +1541,14 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert hasattr(cls, '_cprop5')
         assert hasattr(instance1, '_cprop5')
         assert hasattr(instance2, '_cprop5')
-        assert cls.cprop5 == 2
-        assert instance1.cprop5 == 2
-        assert instance2.cprop5 == 2
-        assert cls._cprop5 == 2
-        assert instance1._cprop5 == 2
-        assert instance2._cprop5 == 2
-        cls.cprop5 = 5  # reset
-        assert cls.cprop5 == 5
+        assert cls.cprop5 == -2
+        assert instance1.cprop5 == -2
+        assert instance2.cprop5 == -2
+        assert cls._cprop5 == -2
+        assert instance1._cprop5 == -2
+        assert instance2._cprop5 == -2
+        cls.cprop5 = -5  # reset
+        assert cls.cprop5 == -5
         del instance1.cprop5
         assert hasattr(cls, 'cprop5')
         assert hasattr(instance1, 'cprop5')
@@ -1562,14 +1556,14 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert hasattr(cls, '_cprop5')
         assert hasattr(instance1, '_cprop5')
         assert hasattr(instance2, '_cprop5')
-        assert cls.cprop5 == 2
-        assert instance1.cprop5 == 2
-        assert instance2.cprop5 == 2
-        assert cls._cprop5 == 2
-        assert instance1._cprop5 == 2
-        assert instance2._cprop5 == 2
-        cls.cprop5 = 5  # reset
-        assert cls.cprop5 == 5
+        assert cls.cprop5 == -2
+        assert instance1.cprop5 == -2
+        assert instance2.cprop5 == -2
+        assert cls._cprop5 == -2
+        assert instance1._cprop5 == -2
+        assert instance2._cprop5 == -2
+        cls.cprop5 = -5  # reset
+        assert cls.cprop5 == -5
         del instance2.cprop5
         assert hasattr(cls, 'cprop5')
         assert hasattr(instance1, 'cprop5')
@@ -1577,21 +1571,21 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert hasattr(cls, '_cprop5')
         assert hasattr(instance1, '_cprop5')
         assert hasattr(instance2, '_cprop5')
-        assert cls.cprop5 == 2
-        assert instance1.cprop5 == 2
-        assert instance2.cprop5 == 2
-        assert cls._cprop5 == 2
-        assert instance1._cprop5 == 2
-        assert instance2._cprop5 == 2
-        cls.cprop5 = 5  # reset
-        assert cls.cprop5 == 5
+        assert cls.cprop5 == -2
+        assert instance1.cprop5 == -2
+        assert instance2.cprop5 == -2
+        assert cls._cprop5 == -2
+        assert instance1._cprop5 == -2
+        assert instance2._cprop5 == -2
+        cls.cprop5 = -5  # reset
+        assert cls.cprop5 == -5
         # Regular class attributes are counterintuitive on instances; do not test
         # Then on properties (to ensure they are not affected):
         with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                  + f"'{second_set_origin}' object has no deleter")):
+                                      + f"'{cls.__name__}' object has no deleter")):
             del instance1.prop4
         with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                  + f"'{second_set_origin}' object has no deleter")):
+                                      + f"'{cls.__name__}' object has no deleter")):
             del instance2.prop4
         assert hasattr(instance1, 'prop4')
         assert hasattr(instance2, 'prop4')
