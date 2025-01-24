@@ -1,23 +1,23 @@
-"""
-This package is an attempt to make file reading/writing (possibly concurrent) more reliable.
+# copyright ############################### #
+# This file is part of the Xaux Package.    #
+# Copyright (c) CERN, 2024.                 #
+# ######################################### #
 
-Last update 28/10/2024 - T. Pugnat and F.F. Van der Veken
-"""
-import sys
-import atexit
-import signal
-import traceback
-import datetime
-import hashlib
-import io
+# Last update 28/10/2024 - T. Pugnat and F.F. Van der Veken
+
 import os
-import random
+import io
+import sys
 import time
 import json
+import atexit
+import signal
+import random
+import traceback
 
-from .fs import FsPath, EosPath
-from .fs.temp import _tempdir
-from .tools import ranID
+from ..fs import FsPath, EosPath
+from ..fs.temp import _tempdir
+from .general_tools import ranID, get_hash, timestamp
 
 
 protected_open = {}
@@ -44,17 +44,6 @@ def _register_exithandlers(obj):
         signal.signal(signal.SIGINT, kill_handler)
         signal.signal(signal.SIGTERM, kill_handler)
         obj.__class__._exithandler_registered = True
-
-
-def get_hash(filename, size=128):
-    """Get a fast hash of a file, in chunks of 'size' (in kb)"""
-    h  = hashlib.blake2b()
-    b  = bytearray(size*1024)
-    mv = memoryview(b)
-    with open(filename, 'rb', buffering=0) as f:
-        for n in iter(lambda : f.readinto(mv), 0):
-            h.update(mv[:n])
-    return h.hexdigest()
 
 
 # TODO: there is some issue with the timestamps. Was this really a file
@@ -524,7 +513,7 @@ class ProtectFile:
         results_saved = False
         alt_file = None
         if self._use_temporary:
-            extension = f"__{datetime.datetime.now().isoformat()}.result"
+            extension = f"__{timestamp(us=True, in_filename=True)}.result"
             alt_file = FsPath(self.file.parent, self.file.name + extension).resolve()
             self.mv_temp(alt_file)
             results_saved = True

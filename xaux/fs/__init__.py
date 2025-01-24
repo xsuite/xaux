@@ -7,7 +7,7 @@ from .fs import FsPath, LocalPath, LocalPosixPath, LocalWindowsPath
 from .afs import AfsPath, AfsPosixPath, AfsWindowsPath, afs_accessible
 from .eos import EosPath, EosPosixPath, EosWindowsPath
 from .eos_methods import eos_accessible, is_egroup_member
-from .fs_methods import *
+from .fs_methods import make_stat_result, size_expand
 from .io import cp, mv
 
 _xrdcp_use_ipv4 = True
