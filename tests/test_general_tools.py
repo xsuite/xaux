@@ -152,6 +152,6 @@ def test_system_lock():
 
 
 def test_hash():
-    hs = get_hash('test_singleton.py')
-    assert hs == '2d4af659d0fdd2779492ffb937e4d04c9eac3bae0c02678297a83077f9548c5001a8b47'\
-               + '71512a02b85628cf5736ebbf7d30071031deb79aa5a391283a093ea4a'
+    hs = get_hash('cronjob_example.py')
+    assert hs == '3eeb344d1236d3d0e2400744c732aded84528a4491600b5533052ced14b03fc5249668' \
+               + '3d2f5e71ac18f4ddf14673a4b53fb06c01c95f1a1d0ea11a485439a17b'
