@@ -4,6 +4,7 @@
 # ######################################### #
 
 import re
+import sys
 import pytest
 
 from xaux import ClassProperty, ClassPropertyMeta, singleton
@@ -806,8 +807,15 @@ def test_docstrings():
 
 
 def test_structure():
-    with pytest.raises(RuntimeError, match=re.escape("Error calling __set_name__ on "
-                        + "'ClassProperty' instance 'cprop' in 'FailingClass'")) as err:
+    if sys.version_info >= (3, 12):
+        err = TypeError
+        regex = "Class 'FailingClass' must have ClassPropertyMeta as a metaclass " \
+              + "to be able to use ClassProperties!"
+    else:
+        err = RuntimeError
+        regex = "Error calling __set_name__ on 'ClassProperty' instance 'cprop' in 'FailingClass'"
+
+    with pytest.raises(err, match=re.escape(regex)) as err:
         class FailingClass:
             _cprop = 1
             @ClassProperty
@@ -818,10 +826,11 @@ def test_structure():
             def cprop(cls):
                 return cls._cprop1
 
-    original_err = err.value.__cause__
-    assert isinstance(original_err, TypeError)
-    assert re.search(str(original_err), "Class 'FailingClass' must have ClassPropertyMeta as a "
-                                         "metaclass to be able to use ClassProperties!")
+    if sys.version_info < (3, 12):
+        original_err = err.value.__cause__
+        assert isinstance(original_err, TypeError)
+        assert re.search(str(original_err), "Class 'FailingClass' must have ClassPropertyMeta "
+                                          + "as a metaclass to be able to use ClassProperties!")
 
 
 def _get_inherited_flag(cls, first_set_from_class, second_set_from_class):
@@ -943,8 +952,8 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
     # Test the setters
     if first_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                        + f"'{cls.__name__}' class has no setter")):
+        regex = f"ClassProperty 'cprop1' of '{cls.__name__}' class has no setter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             cls.cprop1 = 7
         assert cls.cprop1 == 9
         assert cls._cprop1 == 9
@@ -959,8 +968,8 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
         assert 'rcprop3' in cls.__dict__
     if second_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                        + f"'{cls.__name__}' class has no setter")):
+        regex = f"ClassProperty 'cprop4' of '{cls.__name__}' class has no setter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             cls.cprop4 = -7
         assert cls.cprop4 == -9
         assert cls._cprop4 == -9
@@ -977,8 +986,8 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
     # Test the deleters
     if first_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                       + f"'{cls.__name__}' class has no deleter")):
+        regex = f"ClassProperty 'cprop1' of '{cls.__name__}' class has no deleter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del cls.cprop1
         assert hasattr(cls, 'cprop1')
         assert hasattr(cls, '_cprop1')
@@ -992,15 +1001,14 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
         if first_set_inherited:
             assert 'rcprop3' not in cls.__dict__
             assert cls.rcprop3 == 3  # This is the original rcprop3, inherited
-            with pytest.raises(AttributeError, match=re.escape("type object "
-                                 + f"'{cls.__name__}' has no attribute 'rcprop3'")):
+            with pytest.raises(AttributeError):
                 del cls.rcprop3 # Cannot delete an inherited class property
         else:
             assert not hasattr(cls, 'rcprop3')
     if second_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                       + f"'{cls.__name__}' class has no deleter")):
+        regex = f"ClassProperty 'cprop4' of '{cls.__name__}' class has no deleter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del cls.cprop4
         assert hasattr(cls, 'cprop4')
         assert hasattr(cls, '_cprop4')
@@ -1014,8 +1022,7 @@ def _unittest_classproperty_class(cls, first_set_from_class, second_set_from_cla
         if second_set_inherited:
             assert 'rcprop6' not in cls.__dict__
             assert cls.rcprop6 == -3  # This is the original rcprop6, inherited
-            with pytest.raises(AttributeError, match=re.escape("type object "
-                                 + f"'{cls.__name__}' has no attribute 'rcprop6'")):
+            with pytest.raises(AttributeError):
                 del cls.rcprop6 # Cannot delete an inherited class property
         else:
             assert not hasattr(cls, 'rcprop6')
@@ -1201,11 +1208,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
     # Test the setters
     if first_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                        + f"'{cls.__name__}' class has no setter")):
+        regex = f"ClassProperty 'cprop1' of '{cls.__name__}' class has no setter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance1.cprop1 = 7
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                        + f"'{cls.__name__}' class has no setter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance2.cprop1 = 7
         assert cls.cprop1 == 9
         assert instance1.cprop1 == 9
@@ -1236,11 +1242,13 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert instance2._cprop2 == 5
         # Regular class attributes are counterintuitive on instances; do not test
         # Then the properties (to ensure they are not affected):
-        with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                       + f"'{cls.__name__}' object has no setter")):
+        if sys.version_info >= (3, 11):
+            regex = f"property 'prop1' of '{cls.__name__}' object has no setter"
+        else:
+            regex = "can't set attribute"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance1.prop1 = 70
-        with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                       + f"'{cls.__name__}' object has no setter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance2.prop1 = 70
         assert instance1.prop1 == 10
         assert instance2.prop1 == 10
@@ -1279,11 +1287,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert instance2.rprop3 == 70
     if second_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                        + f"'{cls.__name__}' class has no setter")):
+        regex = f"ClassProperty 'cprop4' of '{cls.__name__}' class has no setter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance1.cprop4 = -7
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                        + f"'{cls.__name__}' class has no setter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance2.cprop4 = -7
         assert cls.cprop4 == -9
         assert instance1.cprop4 == -9
@@ -1314,11 +1321,13 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert instance2._cprop5 == -5
         # Regular class attributes are counterintuitive on instances; do not test
         # Then the properties (to ensure they are not affected):
-        with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                       + f"'{cls.__name__}' object has no setter")):
+        if sys.version_info >= (3, 11):
+            regex = f"property 'prop4' of '{cls.__name__}' object has no setter"
+        else:
+            regex = "can't set attribute"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance1.prop4 = -70
-        with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                       + f"'{cls.__name__}' object has no setter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             instance2.prop4 = -70
         assert instance1.prop4 == -10
         assert instance2.prop4 == -10
@@ -1395,11 +1404,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
     # Test the deleters
     if first_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                       + f"'{cls.__name__}' class has no deleter")):
+        regex = f"ClassProperty 'cprop1' of '{cls.__name__}' class has no deleter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance1.cprop1
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop1' of "
-                                       + f"'{cls.__name__}' class has no deleter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance2.cprop1
         assert hasattr(cls, 'cprop1')
         assert hasattr(instance1, 'cprop1')
@@ -1460,11 +1468,13 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert cls.cprop2 == 5
         # Regular class attributes are counterintuitive on instances; do not test
         # Then on properties (to ensure they are not affected):
-        with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                      + f"'{cls.__name__}' object has no deleter")):
+        if sys.version_info >= (3, 11):
+            regex = f"property 'prop1' of '{cls.__name__}' object has no deleter"
+        else:
+            regex = "can't delete attribute"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance1.prop1
-        with pytest.raises(AttributeError, match=re.escape("property 'prop1' of "
-                                      + f"'{cls.__name__}' object has no deleter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance2.prop1
         assert hasattr(instance1, 'prop1')
         assert hasattr(instance2, 'prop1')
@@ -1516,11 +1526,10 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         instance2.rprop3 = 30 # reset
     if second_set_from_class:
         # First the ClassProperties:
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                       + f"'{cls.__name__}' class has no deleter")):
+        regex = f"ClassProperty 'cprop4' of '{cls.__name__}' class has no deleter"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance1.cprop4
-        with pytest.raises(AttributeError, match=re.escape("ClassProperty 'cprop4' of "
-                                       + f"'{cls.__name__}' class has no deleter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance2.cprop4
         assert hasattr(cls, 'cprop4')
         assert hasattr(instance1, 'cprop4')
@@ -1581,11 +1590,13 @@ def _unittest_classproperty_instance(cls, first_set_from_class, second_set_from_
         assert cls.cprop5 == -5
         # Regular class attributes are counterintuitive on instances; do not test
         # Then on properties (to ensure they are not affected):
-        with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                      + f"'{cls.__name__}' object has no deleter")):
+        if sys.version_info >= (3, 11):
+            regex = f"property 'prop4' of '{cls.__name__}' object has no deleter"
+        else:
+            regex = "can't delete attribute"
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance1.prop4
-        with pytest.raises(AttributeError, match=re.escape("property 'prop4' of "
-                                      + f"'{cls.__name__}' object has no deleter")):
+        with pytest.raises(AttributeError, match=re.escape(regex)):
             del instance2.prop4
         assert hasattr(instance1, 'prop4')
         assert hasattr(instance2, 'prop4')

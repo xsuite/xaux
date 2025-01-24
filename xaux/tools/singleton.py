@@ -3,7 +3,6 @@
 # Copyright (c) CERN, 2025.                 #
 # ######################################### #
 
-import sys
 import functools
 
 from .function_tools import count_required_arguments
