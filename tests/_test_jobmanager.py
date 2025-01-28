@@ -11,7 +11,7 @@ from xaux.jobmanager import JobManager, DAJob
 
 
 def test_jobmanager_DA():
-    work_directory = Path("/home/thpugnat/Public/Xsuite/xaux/tests/dirtest_jobmanager")
+    work_directory = Path(__file__).parent / 'dirtest_jobmanager'
     if work_directory.exists():
         for file in work_directory.iterdir():
             if file.is_file():
@@ -22,11 +22,13 @@ def test_jobmanager_DA():
                 file.rmdir()
         work_directory.rmdir()
     manager = JobManager(name='TestDA',job_class=DAJob, work_directory=work_directory)
+    manager.input_directory  = Path(__file__).parent / 'input'
+    manager.output_directory = Path(__file__).parent / 'output'
     manager.save_metadata()
     manager.add(
-        job1={"inputfiles":{"line": "line1.json"}, "particles": "part.1.parquet", "parameters":{"num_particles": 1000, "num_turns": 1000}, "outputfiles": {"part": "part.parquet"}},
-        job2={"inputfiles":{"line": "line2.json"}, "particles": "part.2.parquet", "parameters":{"num_particles": 1000, "num_turns": 1000}, "outputfiles": {"part": "part.parquet"}},
-        job3={"inputfiles":{"line": "line3.json"}, "particles": "part.3.parquet", "parameters":{"num_particles": 1000, "num_turns":  100}, "outputfiles": {"part": "part.parquet"}}
+        job1={"inputfiles":{"line": "line1.json", "extrafile": "/etc/extra.txt"}, "particles": "part.1.parquet", "parameters":{"num_particles": 1000, "num_turns": 1000}, "outputfiles": {"part": "part.parquet"}},
+        job2={"inputfiles":{"line": "line2.json", "extrafile": "/etc/extra.txt"}, "particles": "part.2.parquet", "parameters":{"num_particles": 1000, "num_turns": 1000}, "outputfiles": {"part": "part.parquet"}},
+        job3={"inputfiles":{"line": "line3.json", "extrafile": "/etc/extra.txt"}, "particles": "part.3.parquet", "parameters":{"num_particles": 1000, "num_turns":  100}, "outputfiles": {"part": "part.parquet"}}
     )
     manager.submit()
 
