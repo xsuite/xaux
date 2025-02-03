@@ -7,7 +7,9 @@ import pytest
 import json
 import sys
 from pathlib import Path
-from xaux.jobmanager import JobManager, DAJob
+from xaux.jobmanager import JobManager, DAJob, _testing
+
+_testing = True
 
 
 def test_jobmanager_DA():
