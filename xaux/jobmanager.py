@@ -124,7 +124,7 @@ class DAJob(JobTemplate):
                     raise ValueError(f"Invalid seed line type {type(line['seed'])} for seed {seed}!")
             elif line is not None:
                 raise ValueError(f"Invalid line type {type(line)}")
-        else :
+        else:
             super().loading_line(**kwargs)
 
 
@@ -224,9 +224,10 @@ class JobManager:
             self._work_directory  = arg[0]
         elif len(arg) != 0:
             raise ValueError("Invalid number of arguments!")
-        # Set the job manager main parameters
-        self._name = kwargs.get("name")
-        self._work_directory  = Path(kwargs.get("work_directory"))
+        else:
+            # Set the job manager main parameters
+            self._name = kwargs.get("name")
+            self._work_directory  = Path(kwargs.get("work_directory"))
         if not self._work_directory.exists():
             self._work_directory.mkdir(parents=True)
         # Set the input and output directories
@@ -751,7 +752,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
-    def _retrieve_htcondor(self, job_list=None, **kwargs):
+    def _retrieve_htcondor(self, job_list=None):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
@@ -766,7 +767,7 @@ class JobManager:
         for job_name in results:
             for kk,ff in results[job_name].items():
                 ff = Path(ff)
-                results[job_name][kk] = [None for ii in range(self.step)]
+                results[job_name][kk] = [None for _ in range(self.step)]
                 for ss in range(self.step):
                     ffname = ff.stem+f".{job_name}.{ss}"+ff.suffix
                     if not Path(ff.parent / ffname).exists() and not Path(self._output_directory / ffname).exists():
@@ -781,8 +782,48 @@ class JobManager:
             print(f"Missing results for the following jobs: {missing_results}")
         return results
     
-    def _retrieve_boinc(self, **kwargs):
+    def _retrieve_boinc(self, job_list=None):
         raise NotImplementedError("BOINC retrieval not implemented yet!")
+
+    def clean(self, platform='htcondor', job_list=None):
+        if platform == 'htcondor':
+            self._clean_htcondor(job_list)
+        elif platform == 'boinc':
+            self._clean_boinc(job_list)
+        else:
+            raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
+
+    def _clean_htcondor(self, job_list=None):
+        self.read_job_list()
+        if job_list is None:
+            job_list = self._job_list.keys()
+        # Check if the job list is valid
+        assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
+        # Remove unfinished jobs from the list
+        job_list = [job_name for job_name in job_list if self._job_list[job_name][2]]
+        # Remove jobs from main list and remove files
+        for job_name in job_list:
+            job_description = self._job_list.pop(job_name)
+            # TODO: Work on the removal of files
+            # if 'particles' in job_description[0]:
+            #     particles = Path(job_description[0]['particles'])
+            #     if particles.exists() and particles.parent == self.work_job_input_directory:
+            #         particles.unlink()
+            # if 'outputfiles' in job_description[0]:
+            #     for ff in job_description[0]['outputfiles'].values():
+            #         ff = Path(ff)
+            #         for ss in range(self.step):
+            #             ffname = ff.stem+f".{job_name}.{ss}"+ff.suffix
+            #             if Path(ff.parent / ffname).exists() and ff.parent == self.work_directory:
+            #                 (ff.parent / ffname).unlink()
+        if len(job_list) == 0:
+            print("All jobs are already cleaned!")
+        self.save_job_list()
+
+    def _clean_boinc(self,  job_list=None):
+        raise NotImplementedError("BOINC cleaning not implemented yet!")
+
+
 
 
 # arg = {
