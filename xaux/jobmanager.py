@@ -606,6 +606,7 @@ class JobManager:
             fid.write(f"on_exit_remove = {kwargs.pop('on_exit_remove',' (ExitBySignal == False) && (ExitCode == 0)')}\n")
             fid.write(f"requirements = {kwargs.pop('requirements','Machine =!= LastRemoteHost')}\n")
             fid.write(f"max_retries = {kwargs.pop('max_retries',3)}\n")
+            # Allowed JobFlavors: espresso, microcentury, longlunch, workday, tomorrow, testmatch, nextweek
             fid.write(f"MY.JobFlavour = \"{kwargs.pop('JobFlavor','workday')}\"\n")
             fid.write(f"MY.AccountingGroup = \"{kwargs.pop('accounting_group','group_u_ATS.all')}\"\n")
             # Set additional parameters
