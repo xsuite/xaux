@@ -8,58 +8,66 @@ import xobjects as xo
 import xtrack as xt
 import xpart as xp
 
+# from ..tools.singleton import singleton
+
 # _testing = False
 
+# @singleton
 class JobTemplate:
-    # The class is a singleton
-    def __new__(cls, **kwargs):
-        if not hasattr(cls, 'instance'):
-            cls.instance = super().__new__(cls)
-        return cls.instance
-
     def __init__(self, **kwargs):
         self._context = kwargs.get("_context", None)
-        self.loading_line(**kwargs)
-        particles = kwargs.get("particles", None)
-        if isinstance(particles, xt.Particles):
-            self._particles = particles
-        elif isinstance(particles, (str, Path)):
-            particles = Path(particles)
-            if not particles.exists():
-                raise ValueError(f"particles file {particles} does not exist!")
-            if particles.suffix == '.json':
-                with open(particles, 'r') as fid:
-                    self._particles= xp.Particles.from_dict(json.load(fid), _context=self._context)
-            elif particles.suffix == '.parquet':
-                import pandas as pd
-                with open(particles, 'rb') as fid:
-                    self._particles = xp.Particles.from_pandas(pd.read_parquet(fid, engine="pyarrow"), _context=self._context)
-            else:
-                raise ValueError(f"Invalid particles file extension {particles.suffix}!")
-        elif particles is not None:
-            raise ValueError(f"Invalid particles type {type(particles)}")
+        self.line = kwargs.get("line", None)
+        self.particles = kwargs.get("particles", None)
         if hasattr(self, 'validate_kwargs'):
             self.validate_kwargs(**kwargs)
-
-    def loading_line(self,**kwargs):
-        line = kwargs.get("line", None)
-        if isinstance(line, (str, Path)):
-            line = Path(line)
-            if not line.exists():
-                raise ValueError(f"Line file {line} does not exist!")
-            self._line = xt.Line.from_json(line, _context=self._context)
-        elif isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
-            self._line = line
-        elif line is not None:
-            raise ValueError(f"Invalid line type {type(line)}")
 
     @property
     def line(self):
         return self._line
 
+    @line.setter
+    def line(self, line):
+        if isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
+            self._line = line
+        elif isinstance(line, (str, Path)):
+            line = Path(line)
+            if not line.exists():
+                raise ValueError(f"Line file {line} does not exist!")
+            self._line = xt.Line.from_json(line, _context=self._context)
+        elif line is not None:
+            raise ValueError(f"Invalid line type {type(line)}")
+        else:
+            self._line = None
+
     @property
     def particles(self):
         return self._particles
+
+    @particles.setter
+    def particles(self, particles):
+        if isinstance(particles, xt.Particles):
+            self._particles = particles
+        elif isinstance(particles, (str, Path)):
+            particles = Path(particles) # TODO: verify context is consistent and adapt if needed
+            if not particles.exists():
+                raise ValueError(f"particles file {particles} does not exist!")
+            if particles.suffix == '.json':
+                # TODO: what if these are normalised particle coordinates?
+                with open(particles, 'r') as fid:
+                    self._particles= xp.Particles.from_dict(json.load(fid),
+                                            _context=self._context)
+            elif particles.suffix == '.parquet':
+                # TODO: what if these are normalised particle coordinates?
+                import pandas as pd
+                with open(particles, 'rb') as fid:
+                    self._particles = xp.Particles.from_pandas(
+                        pd.read_parquet(fid, engine="pyarrow"), _context=self._context)
+            else:
+                raise ValueError(f"Unknown file extension {particles.suffix} for Particles!")
+        elif particles is not None:
+            raise ValueError(f"Invalid particles type {type(particles)}")
+        else:
+            self._particles = None
 
     @classmethod
     def run(cls, **kwargs):
@@ -104,11 +112,24 @@ class JobTemplate:
 # Job template for Dynamic Aperture analysis
 # ==========================================================================================
 class DAJob(JobTemplate):
-    def loading_line(self, **kwargs):
-        if 'seed' in kwargs:
-            seed = kwargs.get("seed")
-            line = kwargs.get("line", None)
-            if isinstance(line, (str, Path)):
+    def __init__(self, **kwargs):
+        self._seed = kwargs.pop("seed", None)
+        super().__init__(**kwargs)
+
+    @property
+    def seed(self):
+        return self._seed
+
+    @property
+    def line(self):
+        return JobTemplate.line.fget(self)
+
+    @line.setter
+    def line(self, line):
+        if self.seed is not None:
+            if isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
+                raise ValueError("Line cannot be set directly if 'seed' is provided!")
+            elif isinstance(line, (str, Path)):
                 line = Path(line)
                 if not line.exists():
                     raise ValueError(f"Line file {line} does not exist!")
@@ -125,7 +146,7 @@ class DAJob(JobTemplate):
             elif line is not None:
                 raise ValueError(f"Invalid line type {type(line)}")
         else:
-            super().loading_line(**kwargs)
+            JobTemplate.line.fset(self, line)
 
 
 
@@ -182,9 +203,6 @@ if 'xcoll' in sys.modules:
             # Save a summary of the collimator losses to a text file
             self.ThisLM.save_summary(file=summary_file)
             print(self.ThisLM.summary)
-
-
-
 
 
 # Job Manager
@@ -331,7 +349,7 @@ class JobManager:
         return {'name': self._name, 'work_directory': str(self.work_directory),
                 'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 
                 'job_class_name': self._job_class_name, 'job_class_script': self._job_class_script, 'step': self._step}
-    
+
     def from_dict(self, metadata):
         for kk, vv in metadata.items():
             setattr(self, "_"+kk, vv)
