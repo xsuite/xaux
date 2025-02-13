@@ -475,7 +475,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _submit_htcondor(self, job_list=None, **kwargs):
+    def _submit_htcondor(self, **kwargs): #job_list=None, 
         # Check kwargs
         if 'step' in kwargs:
             self.step = kwargs.pop('step')
@@ -488,8 +488,8 @@ class JobManager:
         import xfields as xf
         if 'xcoll' in sys.modules:
             import xcoll as xc
-        if job_list is None:
-            job_list = self._job_list.keys()
+        # if job_list is None:
+        job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
         # Check if the job is already submitted
@@ -704,10 +704,10 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
-    def _status_htcondor(self, job_list=None, **kwargs):
+    def _status_htcondor(self, **kwargs):#job_list=None, 
         self.read_job_list()
-        if job_list is None:
-            job_list = self._job_list.keys()
+        # if job_list is None:
+        job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
         # Check if submission still running
