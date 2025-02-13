@@ -8,58 +8,66 @@ import xobjects as xo
 import xtrack as xt
 import xpart as xp
 
-_testing = False
+# from ..tools.singleton import singleton
 
+# _testing = False
+
+# @singleton
 class JobTemplate:
-    # The class is a singleton
-    def __new__(cls, **kwargs):
-        if not hasattr(cls, 'instance'):
-            cls.instance = super().__new__(cls)
-        return cls.instance
-
     def __init__(self, **kwargs):
         self._context = kwargs.get("_context", None)
-        self.loading_line(**kwargs)
-        particles = kwargs.get("particles", None)
-        if isinstance(particles, xt.Particles):
-            self._particles = particles
-        elif isinstance(particles, (str, Path)):
-            particles = Path(particles)
-            if not particles.exists():
-                raise ValueError(f"particles file {particles} does not exist!")
-            if particles.suffix == '.json':
-                with open(particles, 'r') as fid:
-                    self._particles= xp.Particles.from_dict(json.load(fid), _context=self._context)
-            elif particles.suffix == '.parquet':
-                import pandas as pd
-                with open(particles, 'rb') as fid:
-                    self._particles = xp.Particles.from_pandas(pd.read_parquet(fid, engine="pyarrow"), _context=self._context)
-            else:
-                raise ValueError(f"Invalid particles file extension {particles.suffix}!")
-        elif particles is not None:
-            raise ValueError(f"Invalid particles type {type(particles)}")
+        self.line = kwargs.get("line", None)
+        self.particles = kwargs.get("particles", None)
         if hasattr(self, 'validate_kwargs'):
             self.validate_kwargs(**kwargs)
-
-    def loading_line(self,**kwargs):
-        line = kwargs.get("line", None)
-        if isinstance(line, (str, Path)):
-            line = Path(line)
-            if not line.exists():
-                raise ValueError(f"Line file {line} does not exist!")
-            self._line = xt.Line.from_json(line, _context=self._context)
-        elif isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
-            self._line = line
-        elif line is not None:
-            raise ValueError(f"Invalid line type {type(line)}")
 
     @property
     def line(self):
         return self._line
 
+    @line.setter
+    def line(self, line):
+        if isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
+            self._line = line
+        elif isinstance(line, (str, Path)):
+            line = Path(line)
+            if not line.exists():
+                raise ValueError(f"Line file {line} does not exist!")
+            self._line = xt.Line.from_json(line, _context=self._context)
+        elif line is not None:
+            raise ValueError(f"Invalid line type {type(line)}")
+        else:
+            self._line = None
+
     @property
     def particles(self):
         return self._particles
+
+    @particles.setter
+    def particles(self, particles):
+        if isinstance(particles, xt.Particles):
+            self._particles = particles
+        elif isinstance(particles, (str, Path)):
+            particles = Path(particles) # TODO: verify context is consistent and adapt if needed
+            if not particles.exists():
+                raise ValueError(f"particles file {particles} does not exist!")
+            if particles.suffix == '.json':
+                # TODO: what if these are normalised particle coordinates?
+                with open(particles, 'r') as fid:
+                    self._particles= xp.Particles.from_dict(json.load(fid),
+                                            _context=self._context)
+            elif particles.suffix == '.parquet':
+                # TODO: what if these are normalised particle coordinates?
+                import pandas as pd
+                with open(particles, 'rb') as fid:
+                    self._particles = xp.Particles.from_pandas(
+                        pd.read_parquet(fid, engine="pyarrow"), _context=self._context)
+            else:
+                raise ValueError(f"Unknown file extension {particles.suffix} for Particles!")
+        elif particles is not None:
+            raise ValueError(f"Invalid particles type {type(particles)}")
+        else:
+            self._particles = None
 
     @classmethod
     def run(cls, **kwargs):
@@ -104,28 +112,41 @@ class JobTemplate:
 # Job template for Dynamic Aperture analysis
 # ==========================================================================================
 class DAJob(JobTemplate):
-    def loading_line(self, **kwargs):
-        if 'seed' in kwargs:
-            seed = kwargs.get("seed")
-            line = kwargs.get("line", None)
-            if isinstance(line, (str, Path)):
+    def __init__(self, **kwargs):
+        self._seed = kwargs.pop("seed", None)
+        super().__init__(**kwargs)
+
+    @property
+    def seed(self):
+        return self._seed
+
+    @property
+    def line(self):
+        return JobTemplate.line.fget(self)
+
+    @line.setter
+    def line(self, line):
+        if self.seed is not None:
+            if isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
+                raise ValueError("Line cannot be set directly if 'seed' is provided!")
+            elif isinstance(line, (str, Path)):
                 line = Path(line)
                 if not line.exists():
                     raise ValueError(f"Line file {line} does not exist!")
                 with open(line, 'r') as fid:
                     line = json.load(fid)
-                self._line = xt.Line.from_dict(line[seed])
+                self._line = xt.Line.from_dict(line[self.seed])
             elif isinstance(line, dict):
-                if isinstance(line[seed], dict):
-                    self._line = xt.Line.from_dict(line[seed])
-                elif isinstance(line[seed], (xt.Line, xt.Multiline, xt.Environment)):
-                    self._line = line[seed]
+                if isinstance(line[self.seed], dict):
+                    self._line = xt.Line.from_dict(line[self.seed])
+                elif isinstance(line[self.seed], (xt.Line, xt.Multiline, xt.Environment)):
+                    self._line = line[self.seed]
                 else:
-                    raise ValueError(f"Invalid seed line type {type(line['seed'])} for seed {seed}!")
+                    raise ValueError(f"Invalid seed line type {type(line['seed'])} for seed {self.seed}!")
             elif line is not None:
                 raise ValueError(f"Invalid line type {type(line)}")
-        else :
-            super().loading_line(**kwargs)
+        else:
+            JobTemplate.line.fset(self, line)
 
 
 
@@ -184,9 +205,6 @@ if 'xcoll' in sys.modules:
             print(self.ThisLM.summary)
 
 
-
-
-
 # Job Manager
 # ==========================================================================================
 class JobManager:
@@ -221,12 +239,13 @@ class JobManager:
         elif len(arg) == 2:
             # Set the job manager main parameters
             self._name = arg[0]
-            self._work_directory  = arg[0]
+            self._work_directory  = Path(arg[0])
         elif len(arg) != 0:
             raise ValueError("Invalid number of arguments!")
-        # Set the job manager main parameters
-        self._name = kwargs.get("name")
-        self._work_directory  = Path(kwargs.get("work_directory"))
+        else:
+            # Set the job manager main parameters
+            self._name = kwargs.get("name")
+            self._work_directory  = Path(kwargs.get("work_directory"))
         if not self._work_directory.exists():
             self._work_directory.mkdir(parents=True)
         # Set the input and output directories
@@ -330,7 +349,7 @@ class JobManager:
         return {'name': self._name, 'work_directory': str(self.work_directory),
                 'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 
                 'job_class_name': self._job_class_name, 'job_class_script': self._job_class_script, 'step': self._step}
-    
+
     def from_dict(self, metadata):
         for kk, vv in metadata.items():
             setattr(self, "_"+kk, vv)
@@ -475,7 +494,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _submit_htcondor(self, **kwargs): #job_list=None, 
+    def _submit_htcondor(self, auto: bool=False, **kwargs): #job_list=None, 
         # Check kwargs
         if 'step' in kwargs:
             self.step = kwargs.pop('step')
@@ -605,6 +624,7 @@ class JobManager:
             fid.write(f"on_exit_remove = {kwargs.pop('on_exit_remove',' (ExitBySignal == False) && (ExitCode == 0)')}\n")
             fid.write(f"requirements = {kwargs.pop('requirements','Machine =!= LastRemoteHost')}\n")
             fid.write(f"max_retries = {kwargs.pop('max_retries',3)}\n")
+            # Allowed JobFlavors: espresso, microcentury, longlunch, workday, tomorrow, testmatch, nextweek
             fid.write(f"MY.JobFlavour = \"{kwargs.pop('JobFlavor','workday')}\"\n")
             fid.write(f"MY.AccountingGroup = \"{kwargs.pop('accounting_group','group_u_ATS.all')}\"\n")
             # Set additional parameters
@@ -685,9 +705,11 @@ class JobManager:
                     fid.write(f"    {job_name}\n")
                 fid.write(f")\n")
         # Submit the jobs to HTCONDOR
-        if not _testing:
+        if auto:
             # os.system(f"condor_submit {self.work_directory / (self._name+'.htcondor.sub')}")
             subprocess.check_output(['condor_submit', str(self.work_directory / (self._name+'.htcondor.sub')) ])
+        else:
+            print(f"condor_submit {self.work_directory / (self._name+'.htcondor.sub')}")
         # Update the job list
         for job_name in job_list:
             self._job_list[job_name][1] = True
@@ -696,11 +718,11 @@ class JobManager:
     def _submit_boinc(self, **kwargs):
         raise NotImplementedError("BOINC submission not implemented yet!")
     
-    def status(self, platform='htcondor', job_list=None):
+    def status(self, platform='htcondor', job_list=None, **kwargs):
         if platform == 'htcondor':
-            self._status_htcondor(job_list)
+            self._status_htcondor(job_list, **kwargs)
         elif platform == 'boinc':
-            self._status_boinc(job_list)
+            self._status_boinc(job_list, **kwargs)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
@@ -743,15 +765,15 @@ class JobManager:
     def _status_boinc(self, **kwargs):
         raise NotImplementedError("BOINC status not implemented yet!")
     
-    def retrieve(self, platform='htcondor', job_list=None):
+    def retrieve(self, platform='htcondor', job_list=None, **kwarg):
         if platform == 'htcondor':
-            return self._retrieve_htcondor(job_list)
+            return self._retrieve_htcondor(job_list, **kwarg)
         elif platform == 'boinc':
-            return self._retrieve_boinc(job_list)
+            return self._retrieve_boinc(job_list, **kwarg)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
-    def _retrieve_htcondor(self, job_list=None, **kwargs):
+    def _retrieve_htcondor(self, job_list=None, **kwarg):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
@@ -766,7 +788,7 @@ class JobManager:
         for job_name in results:
             for kk,ff in results[job_name].items():
                 ff = Path(ff)
-                results[job_name][kk] = [None for ii in range(self.step)]
+                results[job_name][kk] = [None for _ in range(self.step)]
                 for ss in range(self.step):
                     ffname = ff.stem+f".{job_name}.{ss}"+ff.suffix
                     if not Path(ff.parent / ffname).exists() and not Path(self._output_directory / ffname).exists():
@@ -781,8 +803,48 @@ class JobManager:
             print(f"Missing results for the following jobs: {missing_results}")
         return results
     
-    def _retrieve_boinc(self, **kwargs):
+    def _retrieve_boinc(self, job_list=None, **kwarg):
         raise NotImplementedError("BOINC retrieval not implemented yet!")
+
+    def clean(self, platform='htcondor', job_list=None, **kwarg):
+        if platform == 'htcondor':
+            self._clean_htcondor(job_list, **kwarg)
+        elif platform == 'boinc':
+            self._clean_boinc(job_list, **kwarg)
+        else:
+            raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
+
+    def _clean_htcondor(self, job_list=None, **kwarg):
+        self.read_job_list()
+        if job_list is None:
+            job_list = self._job_list.keys()
+        # Check if the job list is valid
+        assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
+        # Remove unfinished jobs from the list
+        job_list = [job_name for job_name in job_list if self._job_list[job_name][2]]
+        # Remove jobs from main list and remove files
+        for job_name in job_list:
+            job_description = self._job_list.pop(job_name)
+            # TODO: Work on the removal of files
+            # if 'particles' in job_description[0]:
+            #     particles = Path(job_description[0]['particles'])
+            #     if particles.exists() and particles.parent == self.work_job_input_directory:
+            #         particles.unlink()
+            # if 'outputfiles' in job_description[0]:
+            #     for ff in job_description[0]['outputfiles'].values():
+            #         ff = Path(ff)
+            #         for ss in range(self.step):
+            #             ffname = ff.stem+f".{job_name}.{ss}"+ff.suffix
+            #             if Path(ff.parent / ffname).exists() and ff.parent == self.work_directory:
+            #                 (ff.parent / ffname).unlink()
+        if len(job_list) == 0:
+            print("All jobs are already cleaned!")
+        self.save_job_list()
+
+    def _clean_boinc(self,  job_list=None, **kwarg):
+        raise NotImplementedError("BOINC cleaning not implemented yet!")
+
+
 
 
 # arg = {

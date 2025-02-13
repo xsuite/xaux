@@ -1,6 +1,6 @@
 # copyright ############################### #
-# This file is part of the Xcoll Package.   #
-# Copyright (c) CERN, 2024.                 #
+# This file is part of the Xaux package.    #
+# Copyright (c) CERN, 2025.                 #
 # ######################################### #
 
 import inspect
