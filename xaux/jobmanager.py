@@ -8,7 +8,7 @@ import xobjects as xo
 import xtrack as xt
 import xpart as xp
 
-_testing = False
+# _testing = False
 
 class JobTemplate:
     # The class is a singleton
@@ -221,7 +221,7 @@ class JobManager:
         elif len(arg) == 2:
             # Set the job manager main parameters
             self._name = arg[0]
-            self._work_directory  = arg[0]
+            self._work_directory  = Path(arg[0])
         elif len(arg) != 0:
             raise ValueError("Invalid number of arguments!")
         else:
@@ -746,15 +746,15 @@ class JobManager:
     def _status_boinc(self, **kwargs):
         raise NotImplementedError("BOINC status not implemented yet!")
     
-    def retrieve(self, platform='htcondor', job_list=None):
+    def retrieve(self, platform='htcondor', job_list=None, **kwarg):
         if platform == 'htcondor':
-            return self._retrieve_htcondor(job_list)
+            return self._retrieve_htcondor(job_list, **kwarg)
         elif platform == 'boinc':
-            return self._retrieve_boinc(job_list)
+            return self._retrieve_boinc(job_list, **kwarg)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
-    def _retrieve_htcondor(self, job_list=None):
+    def _retrieve_htcondor(self, job_list=None, **kwarg):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
@@ -784,18 +784,18 @@ class JobManager:
             print(f"Missing results for the following jobs: {missing_results}")
         return results
     
-    def _retrieve_boinc(self, job_list=None):
+    def _retrieve_boinc(self, job_list=None, **kwarg):
         raise NotImplementedError("BOINC retrieval not implemented yet!")
 
-    def clean(self, platform='htcondor', job_list=None):
+    def clean(self, platform='htcondor', job_list=None, **kwarg):
         if platform == 'htcondor':
-            self._clean_htcondor(job_list)
+            self._clean_htcondor(job_list, **kwarg)
         elif platform == 'boinc':
-            self._clean_boinc(job_list)
+            self._clean_boinc(job_list, **kwarg)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _clean_htcondor(self, job_list=None):
+    def _clean_htcondor(self, job_list=None, **kwarg):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
@@ -822,7 +822,7 @@ class JobManager:
             print("All jobs are already cleaned!")
         self.save_job_list()
 
-    def _clean_boinc(self,  job_list=None):
+    def _clean_boinc(self,  job_list=None, **kwarg):
         raise NotImplementedError("BOINC cleaning not implemented yet!")
 
 
