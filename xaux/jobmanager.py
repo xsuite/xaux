@@ -476,7 +476,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _submit_htcondor(self, job_list=None, **kwargs):
+    def _submit_htcondor(self, job_list=None, auto=False, **kwargs):
         # Check kwargs
         if 'step' in kwargs:
             self.step = kwargs.pop('step')
@@ -686,9 +686,11 @@ class JobManager:
                     fid.write(f"    {job_name}\n")
                 fid.write(f")\n")
         # Submit the jobs to HTCONDOR
-        if not _testing:
+        if auto:
             # os.system(f"condor_submit {self.work_directory / (self._name+'.htcondor.sub')}")
             subprocess.check_output(['condor_submit', str(self.work_directory / (self._name+'.htcondor.sub')) ])
+        else:
+            print(f"condor_submit {self.work_directory / (self._name+'.htcondor.sub')}")
         # Update the job list
         for job_name in job_list:
             self._job_list[job_name][1] = True
@@ -697,11 +699,11 @@ class JobManager:
     def _submit_boinc(self, **kwargs):
         raise NotImplementedError("BOINC submission not implemented yet!")
     
-    def status(self, platform='htcondor', job_list=None):
+    def status(self, platform='htcondor', job_list=None, **kwargs):
         if platform == 'htcondor':
-            self._status_htcondor(job_list)
+            self._status_htcondor(job_list, **kwargs)
         elif platform == 'boinc':
-            self._status_boinc(job_list)
+            self._status_boinc(job_list, **kwargs)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
