@@ -135,14 +135,14 @@ class DAJob(JobTemplate):
                     raise ValueError(f"Line file {line} does not exist!")
                 with open(line, 'r') as fid:
                     line = json.load(fid)
-                self._line = xt.Line.from_dict(line[seed])
+                self._line = xt.Line.from_dict(line[self.seed])
             elif isinstance(line, dict):
-                if isinstance(line[seed], dict):
-                    self._line = xt.Line.from_dict(line[seed])
-                elif isinstance(line[seed], (xt.Line, xt.Multiline, xt.Environment)):
-                    self._line = line[seed]
+                if isinstance(line[self.seed], dict):
+                    self._line = xt.Line.from_dict(line[self.seed])
+                elif isinstance(line[self.seed], (xt.Line, xt.Multiline, xt.Environment)):
+                    self._line = line[self.seed]
                 else:
-                    raise ValueError(f"Invalid seed line type {type(line['seed'])} for seed {seed}!")
+                    raise ValueError(f"Invalid seed line type {type(line['seed'])} for seed {self.seed}!")
             elif line is not None:
                 raise ValueError(f"Invalid line type {type(line)}")
         else:
