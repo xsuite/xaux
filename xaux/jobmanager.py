@@ -16,6 +16,7 @@ import xpart as xp
 class JobTemplate:
     def __init__(self, **kwargs):
         self._context = kwargs.get("_context", None)
+        self.co_search_at = kwargs.get("co_search_at", None)
         self.line = kwargs.get("line", None)
         self.particles = kwargs.get("particles", None)
         if hasattr(self, 'validate_kwargs'):
