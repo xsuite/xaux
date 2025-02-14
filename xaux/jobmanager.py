@@ -362,7 +362,7 @@ class JobManager:
         if not self.job_management_directory.exists():
             self.job_management_directory.mkdir(parents=True)
         with open(self.metafile, 'w') as fid:
-            json.dump(self.to_dict(), fid, indent=True)
+            json.dump(self.to_dict(), fid, indent=True, sort_keys=False)
 
     def read_metadata(self, filename):
         with open(filename, 'r') as fid:
@@ -373,7 +373,7 @@ class JobManager:
         print(f'{self.job_management_file=}')
         print(f'{self._job_list=}')
         with open(self.job_management_file, 'w') as fid:
-            json.dump(self._job_list, fid, indent=True)
+            json.dump(self._job_list, fid, indent=True, sort_keys=False)
 
     def read_job_list(self):
         if not self.job_management_file.exists():
@@ -420,7 +420,7 @@ class JobManager:
             if not self.work_job_input_directory.exists():
                 self.work_job_input_directory.mkdir(parents=True)
             with open(self.work_job_input_directory / filename, 'wb') as pf:
-                json.dump(line, pf, cls=xo.JEncoder, indent=True)
+                json.dump(line, pf, cls=xo.JEncoder, indent=True, sort_keys=False)
             job_description['inputfiles']['line'] = str(self.work_job_input_directory / filename)
         # if 'nbsubdivision' in job_description['parameters']:
         #     nbsubdivision = job_description['parameters'].get('nbsubdivision')
