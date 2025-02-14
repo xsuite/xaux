@@ -370,6 +370,8 @@ class JobManager:
         self.from_dict(metadata)
 
     def save_job_list(self):
+        print(f'{self.job_management_file=}')
+        print(f'{self._job_list=}')
         with open(self.job_management_file, 'w') as fid:
             json.dump(self._job_list, fid, indent=True)
 
