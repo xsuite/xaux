@@ -243,21 +243,28 @@ class JobManager:
             self._work_directory  = Path(arg[0])
         elif len(arg) != 0:
             raise ValueError("Invalid number of arguments!")
-        else:
-            # Set the job manager main parameters
-            self._name = kwargs.get("name")
-            self._work_directory  = Path(kwargs.get("work_directory"))
+        # Set the job manager main parameters
+        if "name" in kwargs:
+            self._name = kwargs.pop("name")
+        if "work_directory" in kwargs:
+            self._work_directory  = Path(kwargs.pop("work_directory"))
         if not self._work_directory.exists():
             self._work_directory.mkdir(parents=True)
+        # Check if the job manager is already created
+        if self._work_directory / (self._name + '.jobmanager.meta.json').exists():
+            self.read_metadata(self._work_directory / (self._name + '.jobmanager.meta.json'))
+            self.read_job_list()
+            if len(kwargs) == 0:
+                return
         # Set the input and output directories
-        self._input_directory = Path(kwargs.get("input_directory")) if "input_directory" in kwargs else None
+        self._input_directory = Path(kwargs.pop("input_directory")) if "input_directory" in kwargs else None
         if self._input_directory is not None and not self._input_directory.exists():
             raise ValueError(f"Input directory {self._input_directory} does not exist!")
-        self._output_directory = Path(kwargs.get("output_directory",)) if "output_directory" in kwargs else None
+        self._output_directory = Path(kwargs.pop("output_directory",)) if "output_directory" in kwargs else None
         if self._output_directory is not None and not self._output_directory.exists():
             self._output_directory.mkdir(parents=True)
         # Set the job class for the tracking
-        self._job_class = kwargs.get("job_class", None)
+        self._job_class = kwargs.pop("job_class", None)
         if self._job_class is None:
             self._job_class_name = None
             self._job_class_script = ""
@@ -266,8 +273,8 @@ class JobManager:
             self._job_class_script = os.path.abspath(sys.modules[self._job_class.__module__].__file__)
         if "job_class" not in kwargs:
             if"job_class_name" in kwargs and "job_class_script" in kwargs:
-                self._job_class_name = kwargs["job_class_name"]
-                self._job_class_script = kwargs.get("job_class_script")
+                self._job_class_name   = kwargs.pop("job_class_name")
+                self._job_class_script = kwargs.pop("job_class_script")
                 # # Import the job class TODO: Does not work
                 # from importlib import import_module
                 # self._job_class = import_module(self._job_class_name, package=self._job_class_script)
@@ -275,6 +282,7 @@ class JobManager:
                 raise ValueError("Either specify the class for the tracking using job_class or both job_class_name and job_class_script!")
         self._step = kwargs.get("step", 1)
         self._main_python_env = kwargs.get("main_python_env", "/cvmfs/sft.cern.ch/lcg/views/LCG_106/x86_64-el9-gcc13-opt/setup.sh")
+        self.save_metadata()
         self.read_job_list()
 
     @property
