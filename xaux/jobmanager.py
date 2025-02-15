@@ -488,6 +488,14 @@ class JobManager:
                 particles = job_description['particles']
                 particles_filename = f"{self._name}-{job_name}.particles.parquet"
                 job_description['particles'] = str(self._make_particles_file(particles_filename, particles))
+        # Check if there is Path class in the job description and convert it to string
+        for kk1, vv1 in job_description.items():
+            if isinstance(vv1, dict):
+                for kk2, vv2 in vv1.items():
+                    if isinstance(vv2, Path):
+                        job_description[kk1][kk2] = str(vv2)
+            elif isinstance(vv1, Path):
+                job_description[kk1] = str(vv1)
         return [[job_name, job_description, False, False]]
 
     def _make_particles_file(self, filename, particles):
