@@ -332,7 +332,7 @@ class JobManager:
 
     @property
     def metafile(self):
-        return self.work_directory / (self._name + '.meta.json')
+        return self.work_directory / (self._name + '.jobmanager.meta.json')
 
     @property
     def job_management_file(self):
@@ -349,7 +349,7 @@ class JobManager:
     def to_dict(self):
         return {'name': self._name, 'work_directory': str(self.work_directory),
                 'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 
-                'job_class_name': self._job_class_name, 'job_class_script': self._job_class_script, 'step': self._step}
+                'job_class_name': str(self._job_class_name), 'job_class_script': str(self._job_class_script), 'step': self._step}
 
     def from_dict(self, metadata):
         for kk, vv in metadata.items():
