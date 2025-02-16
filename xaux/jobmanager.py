@@ -264,14 +264,15 @@ class JobManager:
         if self._output_directory is not None and not self._output_directory.exists():
             self._output_directory.mkdir(parents=True)
         # Set the job class for the tracking
-        self._job_class = kwargs.pop("job_class", None)
-        if self._job_class is None:
-            self._job_class_name = None
-            self._job_class_script = ""
+        if "job_class" in kwargs:
+            self._job_class = kwargs.pop("job_class", None)
+            if self._job_class is None:
+                self._job_class_name = None
+                self._job_class_script = ""
+            else:
+                self._job_class_name = self._job_class.__name__
+                self._job_class_script = Path(sys.modules[self._job_class.__module__].__file__).absolute()
         else:
-            self._job_class_name = self._job_class.__name__
-            self._job_class_script = os.path.abspath(sys.modules[self._job_class.__module__].__file__)
-        if "job_class" not in kwargs:
             if"job_class_name" in kwargs and "job_class_script" in kwargs:
                 self._job_class_name   = kwargs.pop("job_class_name")
                 self._job_class_script = kwargs.pop("job_class_script")
@@ -312,7 +313,7 @@ class JobManager:
     def job_class(self, job_class):
         self._job_class = job_class
         self._job_class_name = self._job_class.__name__
-        self._job_class_script = os.path.abspath(sys.modules[self._job_class.__module__].__file__)
+        self._job_class_script = Path(sys.modules[self._job_class.__module__].__file__).absolute()
 
     @property
     def work_directory(self):
