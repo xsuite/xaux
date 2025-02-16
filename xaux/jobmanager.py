@@ -251,7 +251,7 @@ class JobManager:
         if not self._work_directory.exists():
             self._work_directory.mkdir(parents=True)
         # Check if the job manager is already created
-        if self._work_directory / (self._name + '.jobmanager.meta.json').exists():
+        if (self._work_directory / (self._name + '.jobmanager.meta.json')).exists():
             self.read_metadata(self._work_directory / (self._name + '.jobmanager.meta.json'))
             self.read_job_list()
             if len(kwargs) == 0:
@@ -344,7 +344,7 @@ class JobManager:
 
     @property
     def job_management_file(self):
-        return self.work_directory / (self._name + '.jobs.json')
+        return self.work_directory / (self._name + '.jobmanager.jobs.json')
 
     @property
     def work_job_input_directory(self):
