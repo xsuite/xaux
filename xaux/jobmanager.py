@@ -107,7 +107,8 @@ class JobTemplate:
                 json.dump(self.particles.to_dict(), fid, cls=xo.JEncoder)
         elif output_file.suffix == '.parquet':
             with open(output_file, 'wb') as pf:
-                self.particles.to_parquet(pf, index=True, engine="pyarrow")
+                # self.particles.to_parquet(pf, index=True, engine="pyarrow")
+                (self.particles.to_pandas()).to_parquet(pf, index=True, engine="pyarrow")
 
 
 
@@ -614,15 +615,15 @@ class JobManager:
             fid.write('echo $( date )"    Running job ${job_name}.";\n')
             fid.write('echo;\n')
             # List arguments for the python script
-            job_args  = [f"{kk}="+"${"+kk+"}" for kk in lmulti_inputfiles]
-            job_args += [f"{kk}={Path(vv).name}" for kk,vv in lunique_inputfiles.items()]
-            job_args += [f"{kk}="+"${"+kk+"}" for kk in lmulti_particles]
-            job_args += [f"{kk}="+Path(vv).stem+".${job_name}"+Path(vv).suffix for kk,vv in lunique_particles.items()]
-            job_args += [f"{kk}="+"${"+kk+"}" for kk in lmulti_parameters]
-            job_args += [f"{kk}={vv}" for kk,vv in lunique_parameters.items()]
-            job_args += [f"{kk}="+"${"+kk+"}" for kk in lmulti_outputfiles]
-            job_args += [f"{kk}="+Path(vv).stem+".${job_name}"+Path(vv).suffix for kk,vv in lunique_outputfiles.items()]
-            job_args = "'"+"', '".join(job_args)+"'" if len(job_args) != 0 else ''
+            job_args  = [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_inputfiles]
+            job_args += [f"{kk}='{Path(vv).name}'" for kk,vv in lunique_inputfiles.items()]
+            job_args += [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_particles]
+            job_args += [f"{kk}='"+Path(vv).stem+".${job_name}"+Path(vv).suffix+"'" for kk,vv in lunique_particles.items()]
+            job_args += [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_parameters]
+            job_args += [f"{kk}='{vv}'" for kk,vv in lunique_parameters.items()]
+            job_args += [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_outputfiles]
+            job_args += [f"{kk}='"+Path(vv).stem+".${job_name}"+Path(vv).suffix+"'" for kk,vv in lunique_outputfiles.items()]
+            job_args = ", ".join(job_args)
             # Execute python script
             # fid.write(f"\npython {Path('xaux/jobmanager.py')} {self._job_class_name} {self._job_class_script} {job_args}\n")
             fid.write(f"\npython -c \"from {self._job_class_script.stem} import {self._job_class_name}; {self._job_class_name}.run({job_args})\";\n")
@@ -662,6 +663,7 @@ class JobManager:
             if len(lmulti_inputfiles) != 0:
                 if len(linputs) != 0:
                     linputs += ', '
+                # linputs += '$('+'), $('.join([f'{kk}_path)/$({kk}_name' for kk in lmulti_inputfiles])+')'
                 linputs += '$('+'), $('.join([kk for kk in lmulti_inputfiles])+')'
             if len(lunique_particles) != 0:
                 for vv in lunique_particles.values():
@@ -675,6 +677,7 @@ class JobManager:
             if len(lmulti_particles) != 0:
                 if len(linputs) != 0:
                     linputs += ', '
+                # linputs += '$('+'), $('.join([f'{kk}_path)/$({kk}_name' for kk in lmulti_particles])+')'
                 linputs += '$('+'), $('.join([kk for kk in lmulti_particles])+')'
             fid.write(f"transfer_input_files    = {linputs}\n")
             # Set output files transfer
@@ -687,6 +690,7 @@ class JobManager:
                         vv = f"{Path(default_outputdir, (Path(vv).stem+'.$(job_name).$(Step)'+Path(vv).suffix))}"
                     loutputs += f"{vv}, "
                 if len(lmulti_outputfiles) != 0:
+                    # loutputs += '$('+'),$('.join([f'{kk}_path)/$({kk}_name' for kk in lmulti_outputfiles])+')'
                     loutputs += '$('+'),$('.join([kk for kk in lmulti_outputfiles])+')'
                 fid.write(f"transfer_output_files   = {loutputs}\n")
                 fid.write(f"when_to_transfer_output = ON_EXIT\n")
