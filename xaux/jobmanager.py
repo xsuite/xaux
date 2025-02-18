@@ -90,7 +90,7 @@ class JobTemplate:
         self.generate_output(**kwargs)
 
     def track(self, **kwargs):
-        num_turns = kwargs.get("num_turns", 1)
+        num_turns = int(kwargs.get("num_turns", 1))
         ele_start = kwargs.get("ele_start", None)
         ele_stop = kwargs.get("ele_stop", None)
         self.line.track(self.particles, num_turns=num_turns, ele_start=ele_start, ele_stop=ele_stop)
