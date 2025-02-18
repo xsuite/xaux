@@ -601,8 +601,10 @@ class JobManager:
             fid.write(f"cp -r {str(Path(sys.modules[JobTemplate.__module__].__file__).parent)} .;\n") # Copy of xaux
             if 'xcoll' in sys.modules:
                 fid.write(f"cp -r {str(Path(xc.__file__).parent)} .;\n")      # Copy of xcoll if exists
+            # Copy input files locally
+            fid.write(f"\ncp {self._job_class_script} .;\n") # TODO: pass this to htcondor submission file
             # Check local copy of the job input files
-            fid.write('\necho "uname -r:" `uname -r;\n')
+            fid.write('\necho "uname -r:" `uname -r`;\n')
             fid.write('python --version;\n')
             fid.write('echo "which python:" `which python`;\n')
             fid.write('echo "ls:";\n')
@@ -610,21 +612,19 @@ class JobManager:
             fid.write('echo;\n')
             fid.write('echo $( date )"    Running job ${job_name}.";\n')
             fid.write('echo;\n')
-            # Copy input files locally
-            fid.write(f"cp {self._job_class_script} .\n") # TODO: pass this to htcondor submission file
             # List arguments for the python script
-            job_args  = [f"'{kk}='"+"${"+kk+"}" for kk in lmulti_inputfiles]
-            job_args += [f"'{kk}={Path(vv).name}'" for kk,vv in lunique_inputfiles.items()]
-            job_args += [f"'{kk}='"+"${"+kk+"}" for kk in lmulti_particles]
-            job_args += [f"'{kk}="+Path(vv).stem+".'${job_name}'"+Path(vv).suffix+"'" for kk,vv in lunique_particles.items()]
-            job_args += [f"'{kk}='"+"${"+kk+"}" for kk in lmulti_parameters]
-            job_args += [f"'{kk}={vv}'" for kk,vv in lunique_parameters.items()]
-            job_args += [f"'{kk}='"+"${"+kk+"}" for kk in lmulti_outputfiles]
-            job_args += [f"'{kk}="+Path(vv).stem+".'${job_name}'"+Path(vv).suffix+"'" for kk,vv in lunique_outputfiles.items()]
-            job_args = ' '.join(job_args)
+            job_args  = [f"{kk}="+"${"+kk+"}" for kk in lmulti_inputfiles]
+            job_args += [f"{kk}={Path(vv).name}" for kk,vv in lunique_inputfiles.items()]
+            job_args += [f"{kk}="+"${"+kk+"}" for kk in lmulti_particles]
+            job_args += [f"{kk}="+Path(vv).stem+".${job_name}"+Path(vv).suffix for kk,vv in lunique_particles.items()]
+            job_args += [f"{kk}="+"${"+kk+"}" for kk in lmulti_parameters]
+            job_args += [f"{kk}={vv}" for kk,vv in lunique_parameters.items()]
+            job_args += [f"{kk}="+"${"+kk+"}" for kk in lmulti_outputfiles]
+            job_args += [f"{kk}="+Path(vv).stem+".${job_name}"+Path(vv).suffix for kk,vv in lunique_outputfiles.items()]
+            job_args = "'"+"', '".join(job_args)+"'" if len(job_args) != 0 else ''
             # Execute python script
             # fid.write(f"\npython {Path('xaux/jobmanager.py')} {self._job_class_name} {self._job_class_script} {job_args}\n")
-            fid.write(f"\npython -c 'from {self._job_class_script.stem} import {self._job_class_name}; {self._job_class_name}.run({job_args})';\n")
+            fid.write(f"\npython -c \"from {self._job_class_script.stem} import {self._job_class_name}; {self._job_class_name}.run({job_args})\";\n")
             # last steps
             fid.write('echo;\n')
             fid.write('echo $( date )"    End job ${job_name}.";\n')
