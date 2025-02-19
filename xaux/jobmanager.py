@@ -490,7 +490,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _submit_htcondor(self, auto: bool=False, **kwargs): #job_list=None, 
+    def _submit_htcondor(self, auto: bool=False, **kwargs):
         # Check kwargs
         if 'step' in kwargs:
             self.step = kwargs.pop('step')
