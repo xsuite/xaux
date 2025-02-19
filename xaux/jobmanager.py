@@ -105,7 +105,6 @@ class JobTemplate:
                 json.dump(self.particles.to_dict(), fid, cls=xo.JEncoder)
         elif output_file.suffix == '.parquet':
             with open(output_file, 'wb') as pf:
-                # self.particles.to_parquet(pf, index=True, engine="pyarrow")
                 (self.particles.to_pandas()).to_parquet(pf, index=True, engine="pyarrow")
 
 
@@ -500,7 +499,6 @@ class JobManager:
         import xfields as xf
         if 'xcoll' in sys.modules:
             import xcoll as xc
-        # if job_list is None:
         job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
@@ -518,7 +516,6 @@ class JobManager:
                         assert jj in self._job_list[job_list[0]][0][kk], "Jobs have different structures!"
         # Classify job arguments between the ones with unique values and the ones with different values between jobs
         lunique_inputfiles  = {}; lmulti_inputfiles  = {}
-        # lunique_particles   = {}; lmulti_particles   = {}
         lunique_parameters  = {}; lmulti_parameters  = {}
         lunique_outputfiles = {}; lmulti_outputfiles = {}
         jn0 = job_list[0]
@@ -670,7 +667,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
-    def _status_htcondor(self, **kwargs):#job_list=None, 
+    def _status_htcondor(self, **kwargs):
         self.read_job_list()
         job_list = self._job_list.keys()
         # Check if the job list is valid
@@ -703,10 +700,8 @@ class JobManager:
                     if not job_description[2]:
                         all_outputfiles_present = True
                         for ff in job_description[0]['outputfiles']:
-                            # ff = Path(ff)
                             if self.step > 0:
                                 for ss in range(self.step):
-                                    # self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
                                     # TODO: Add output directory check
                                     if not (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff).exists():
                                         all_outputfiles_present = False
