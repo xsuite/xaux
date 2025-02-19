@@ -153,7 +153,7 @@ class DAJob(JobTemplate):
 # Job template for loss map calculation
 # ==========================================================================================
 if 'xcoll' in sys.modules:
-    import xcoll as xc
+    import xcoll as xc # type: ignore
     import numpy as np
 
     class LossMapPencilJob(JobTemplate):
@@ -498,7 +498,7 @@ class JobManager:
         import xdeps as xd
         import xfields as xf
         if 'xcoll' in sys.modules:
-            import xcoll as xc
+            import xcoll as xc # type: ignore
         job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
