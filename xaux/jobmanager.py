@@ -811,16 +811,19 @@ class JobManager:
         job_list = [job_name for job_name in job_list if self._job_list[job_name][2]]
         # Remove jobs from main list and remove files
         for job_name in job_list:
-            job_description = self._job_list.pop(job_name)
-            # TODO: Work on the removal of files
-            # if 'outputfiles' in job_description[0]:
-            #     for ff in job_description[0]['outputfiles'].values():
-            #         ff = Path(ff)
-            #         for ss in range(self.step):
-            #             ffname = ff.stem+f".{job_name}.{ss}"+ff.suffix
-            #             if Path(ff.parent / ffname).exists() and ff.parent == self.work_directory:
-            #                 (ff.parent / ffname).unlink()
-        if len(job_list) == 0:
+            if self._job_list[job_name][3]:
+                job_dirs = list(self.output_directory.glob(self._name+f'.htcondor.{job_name}.*'))
+                # The user should remove the output files
+                if not any([len(jds.glob('*'))>0 for jds in job_dirs]):
+                    for jds in job_dirs:
+                        jds.rmdir()
+                    self._job_list.pop(job_name)
+                else:
+                    print(f"Job {job_name} still has output files saved. Please remove them for the cleaning to be performed! Check:\n"+ \
+                          f"{self.output_directory / (self._name+f'.htcondor.{job_name}.*')}")
+            else:
+                print(f"Job {job_name} output files have not been retrived, so it cannot be cleaned!")
+        if len(self._job_list) == 0:
             print("All jobs are already cleaned!")
         self.save_job_list()
 
