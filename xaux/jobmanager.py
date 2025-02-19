@@ -676,9 +676,22 @@ class JobManager:
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
         # Check if submission still running
-        similation_status = subprocess.run(['ls', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8')
-        if self._name in similation_status:
-            print(f"{self._name} is still running!")
+        similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+        still_running = (self._name in similation_status)
+        if not still_running:
+            similation_status_lines = similation_status.split('\n')[3:-6]
+            similation_status_lines = [line.split() for line in similation_status_lines]
+            header = similation_status_lines[0]
+            similation_status_lines = [line for line in similation_status_lines[1:] if self._name in line][0]
+            status_htcondor = {hh:ss for hh,ss in zip(header,similation_status_lines)}
+            for kk,vv in status_htcondor.items():
+                status_htcondor[kk] = '0' if (vv == "_") else vv
+            done = status_htcondor.pop('DONE', '0')
+            run  = status_htcondor.pop('RUN',  '0')
+            idle = status_htcondor.pop('IDLE', '0')
+            hold = status_htcondor.pop('HOLD', '0')
+            total= status_htcondor.pop('TOTAL','0')
+            print(f"{self._name} is still running (Done: {done} / Run: {run} / Idle: {idle} / Hold: {hold} / Total: {total})!")
         else:
             print(f"{self._name} is not running!")
         # Check the status of the jobs
@@ -690,16 +703,26 @@ class JobManager:
                     if not job_description[2]:
                         all_outputfiles_present = True
                         for ff in job_description[0]['outputfiles']:
-                            ff = Path(ff)
+                            # ff = Path(ff)
                             for ss in range(self.step):
-                                ffname = ff.stem+f".{job_name}.{ss}"+Path(ff).suffix
+                                self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
                                 # TODO: Add output directory check
-                                if not Path(ff.parent / ffname).exists() and not Path(self._output_directory / ffname).exists():
+                                if not (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff).exists():
                                     all_outputfiles_present = False
-                        job_description[2] = all_outputfiles_present
-                    print(f"   - Job {job_name} is {'not ' if not job_description[2] else ''}completed!") 
+                        self._job_list[job_name] = all_outputfiles_present
+                    print(f"   - Job {job_name} is {'not ' if not self._job_list[job_name][2] else ''}completed!")
                 else:
-                    print(f"   - Job {job_name} is submitted!")
+                    all_outputfiles_present = True
+                    for ss in range(self.step):
+                        ff = (self._name+'.htcondor.*.*.{job_name}.{ss}.out')
+                        list_ff = list((self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')).glob(ff))
+                        # TODO: Add output directory check
+                        if len(list_ff) == 0:
+                            all_outputfiles_present = False
+                        elif len(list_ff) > 1:
+                            raise ValueError(f"Multiple output files found for job {job_name}:\n{list_ff}")
+                    self._job_list[job_name] = all_outputfiles_present
+                    print(f"   - Job {job_name} is {'not ' if not self._job_list[job_name][2] else ''}completed!")
             else:
                 print(f"   - Job {job_name} is not submitted!")
         self.save_job_list()
@@ -722,7 +745,7 @@ class JobManager:
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
         # Check if submission still running
-        similation_status = subprocess.run(['ls', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+        similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
         if self._name in similation_status:
             raise FileNotFoundError(f"{self._name} is still running! Wait for the end of the simulation before retrieving the results!")
         # Retrieve the results of the jobs
