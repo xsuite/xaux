@@ -651,7 +651,7 @@ class JobManager:
         if auto:
             print(f"Submit: `condor_submit {self.work_directory / (self._name+'.htcondor.sub')}`")
             subprocess.check_output(['condor_submit', str(self.work_directory / (self._name+'.htcondor.sub')) ])
-            print(f"Submit done.')}`")
+            print(f"Submit done.")
         else:
             print(f"please run: `condor_submit {self.work_directory / (self._name+'.htcondor.sub')}`")
         # Update the job list
