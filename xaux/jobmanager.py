@@ -705,7 +705,7 @@ class JobManager:
                         for ff in job_description[0]['outputfiles']:
                             # ff = Path(ff)
                             for ss in range(self.step):
-                                self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
+                                # self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
                                 # TODO: Add output directory check
                                 if not (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff).exists():
                                     all_outputfiles_present = False
@@ -747,21 +747,23 @@ class JobManager:
         # Check if submission still running
         similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
         if self._name in similation_status:
-            raise FileNotFoundError(f"{self._name} is still running! Wait for the end of the simulation before retrieving the results!")
+            print(f"WARNING: {self._name} is still running! Wait for the end of the simulation before retrieving the results!")
         # Retrieve the results of the jobs
-        results = {kk:self._job_list[kk][0]['outputfiles'] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
-        for job_name in results:
-            for kk,ff in results[job_name].items():
-                ff = Path(ff)
-                results[job_name][kk] = [None for _ in range(self.step)]
+        if 'outputfiles' in self._job_list[self._job_list.keys()[0]][0]:
+            results = {kk:self._job_list[kk][0]['outputfiles'] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
+            for job_name in results:
+                for kk,ff in results[job_name].items():
+                    ff = Path(ff)
+                    results[job_name][kk] = [None for _ in range(self.step)]
+                    for ss in range(self.step):
+                        results[job_name][kk][ss] = (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff)
+                self._job_list[job_name][3] = True
+        else:
+            results = {kk:[] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
+            for job_name in results:
                 for ss in range(self.step):
-                    ffname = ff.stem+f".{job_name}.{ss}"+ff.suffix
-                    if not Path(ff.parent / ffname).exists() and not Path(self._output_directory / ffname).exists():
-                        raise FileNotFoundError(f"File {ffname} not found for job {job_name}!")
-                    if Path(ff.parent / ffname).exists():
-                        results[job_name][kk][ss] = ff.parent / ffname
-                    else:
-                        results[job_name][kk][ss] = self._output_directory / ffname
+                    ff = (self._name+'.htcondor.*.*.{job_name}.{ss}.out')
+                    results[job_name] = list((self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')).glob(ff))
         # List missing results
         missing_results = [kk for kk in job_list if kk not in results]
         if len(missing_results) != 0:
