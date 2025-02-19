@@ -704,18 +704,31 @@ class JobManager:
                         all_outputfiles_present = True
                         for ff in job_description[0]['outputfiles']:
                             # ff = Path(ff)
-                            for ss in range(self.step):
-                                # self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
-                                # TODO: Add output directory check
-                                if not (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff).exists():
+                            if self.step > 0:
+                                for ss in range(self.step):
+                                    # self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
+                                    # TODO: Add output directory check
+                                    if not (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff).exists():
+                                        all_outputfiles_present = False
+                            else:
+                                if not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists():
                                     all_outputfiles_present = False
                         self._job_list[job_name] = all_outputfiles_present
                     print(f"   - Job {job_name} is {'not ' if not self._job_list[job_name][2] else ''}completed!")
                 else:
                     all_outputfiles_present = True
-                    for ss in range(self.step):
-                        ff = (self._name+'.htcondor.*.*.{job_name}.{ss}.out')
-                        list_ff = list((self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')).glob(ff))
+                    if self.step > 0:
+                        for ss in range(self.step):
+                            ff = (self._name+'.htcondor.*.*.{job_name}.{ss}.out')
+                            list_ff = list((self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')).glob(ff))
+                            # TODO: Add output directory check
+                            if len(list_ff) == 0:
+                                all_outputfiles_present = False
+                            elif len(list_ff) > 1:
+                                raise ValueError(f"Multiple output files found for job {job_name}:\n{list_ff}")
+                    else:
+                        ff = (self._name+'.htcondor.*.*.{job_name}.0.out')
+                        list_ff = list((self.output_directory / (self._name+f'.htcondor.{job_name}.0')).glob(ff))
                         # TODO: Add output directory check
                         if len(list_ff) == 0:
                             all_outputfiles_present = False
@@ -753,17 +766,24 @@ class JobManager:
             results = {kk:self._job_list[kk][0]['outputfiles'] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
             for job_name in results:
                 for kk,ff in results[job_name].items():
-                    ff = Path(ff)
-                    results[job_name][kk] = [None for _ in range(self.step)]
-                    for ss in range(self.step):
-                        results[job_name][kk][ss] = (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff)
+                    if self.step > 0:
+                        results[job_name][kk] = [None for _ in range(self.step)]
+                        for ss in range(self.step):
+                            results[job_name][kk][ss] = (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff)
+                    else:
+                        results[job_name][kk] = (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff)
                 self._job_list[job_name][3] = True
         else:
-            results = {kk:[] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
+            results = {kk:[None for _ in range(self.step)] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
             for job_name in results:
-                for ss in range(self.step):
-                    ff = (self._name+'.htcondor.*.*.{job_name}.{ss}.out')
-                    results[job_name] = list((self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')).glob(ff))
+                if self.step > 0:
+                    for ss in range(self.step):
+                        ff = (self._name+'.htcondor.*.*.{job_name}.{ss}.out')
+                        results[job_name][ss] = list((self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')).glob(ff))
+                else:
+                    ff = (self._name+'.htcondor.*.*.{job_name}.0.out')
+                    results[job_name][0] = list((self.output_directory / (self._name+f'.htcondor.{job_name}.0')).glob(ff))
+                self._job_list[job_name][3] = True
         # List missing results
         missing_results = [kk for kk in job_list if kk not in results]
         if len(missing_results) != 0:
