@@ -10,8 +10,6 @@ import xpart as xp
 
 # from ..tools.singleton import singleton
 
-# _testing = False
-
 # @singleton
 class JobTemplate:
     def __init__(self, **kwargs):
@@ -369,10 +367,6 @@ class JobManager:
     def job_specific_input_directory(self):
         return self.work_directory / 'job_specific_input'
 
-    # @property
-    # def job_management_directory(self):
-    #     return self.work_directory / 'job_management_directory'
-
     def to_dict(self):
         return {'name': self._name, 'work_directory': str(self.work_directory),
                 'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 
@@ -397,8 +391,6 @@ class JobManager:
         self.from_dict(metadata)
 
     def save_job_list(self):
-        # print(f'{self.job_management_file=}')
-        # print(f'{self._job_list=}')
         with open(self.job_management_file, 'w') as fid:
             json.dump(self._job_list, fid, indent=True, sort_keys=False)
 
@@ -489,42 +481,7 @@ class JobManager:
                 with open(new_filename, 'wb') as pf:
                     data.to_parquet(pf, index=True, engine="pyarrow")
             job_description['inputfiles'][kk] = str(new_filename)
-        
-        # if 'line' in job_description['inputfiles'] and isinstance(job_description['inputfiles']['line'], (xt.Line, xt.Multiline)):
-        #     line = job_description['inputfiles']['line'].to_dict()
-        #     filename = f"{self._name}.line.{job_name}.json"
-        #     if not self.job_specific_input_directory.exists():
-        #         self.job_specific_input_directory.mkdir(parents=True)
-        #     with open(self.job_specific_input_directory / filename, 'wb') as pf:
-        #         json.dump(line, pf, cls=xo.JEncoder, indent=True, sort_keys=False)
-        #     job_description['inputfiles']['line'] = str(self.job_specific_input_directory / filename)
-        # # Check if the particles are a xobjects object or a pandas DataFrame and save it into a file
-        # if 'particles' in job_description:
-        #     import pandas as pd
-        #     if isinstance(job_description['particles'], xp.Particles):
-        #         particles = job_description['particles'].to_pandas()
-        #         particles_filename = f"{self._name}-{job_name}.particles.parquet"
-        #         job_description['particles'] = str(self._make_particles_file(particles_filename, particles))
-        #     elif isinstance(job_description['particles'], pd.DataFrame):
-        #         particles = job_description['particles']
-        #         particles_filename = f"{self._name}-{job_name}.particles.parquet"
-        #         job_description['particles'] = str(self._make_particles_file(particles_filename, particles))
-        # Check if there is Path class in the job description and convert it to string
-        # for kk1, vv1 in job_description.items():
-        #     if isinstance(vv1, dict):
-        #         for kk2, vv2 in vv1.items():
-        #             if isinstance(vv2, Path):
-        #                 job_description[kk1][kk2] = str(vv2)
-        #     elif isinstance(vv1, Path):
-        #         job_description[kk1] = str(vv1)
         return [[job_name, job_description, False, False, False]] # job_name, job_description, submitted, finished, returned
-
-    # def _make_particles_file(self, filename, particles):
-    #     if not self.job_specific_input_directory.exists():
-    #         self.job_specific_input_directory.mkdir(parents=True)
-    #     with open(self.job_specific_input_directory / filename, 'wb') as pf:
-    #         particles.to_parquet(pf, index=True, engine="pyarrow")
-    #     return self.job_specific_input_directory / filename
 
     def submit(self, platform='htcondor', **kwargs):
         if platform == 'htcondor':
@@ -569,33 +526,20 @@ class JobManager:
             largs = self._job_list[jn0][0]['inputfiles']
             lunique_inputfiles = {kk:vv for kk,vv in largs.items() if not any([self._job_list[jn][0]['inputfiles'][kk] != largs[kk] for jn in job_list[1:]])}
             lmulti_inputfiles  = {kk:vv for kk,vv in largs.items() if kk not in lunique_inputfiles}
-        # if 'particles' in self._job_list[jn0][0]:
-        #     if self.step > 1:
-        #         raise ValueError("Step must be 1 if particles are given!")
-        #     largs = {'particles':self._job_list[jn0][0]['particles']}
-        #     lunique_particles = largs if not any([self._job_list[jn][0]['particles'] != largs['particles'] for jn in job_list[1:]]) else {}
-        #     lmulti_particles  = largs if not any([self._job_list[jn][0]['particles'] == largs['particles'] for jn in job_list[1:]]) else {}
-        #     if len(lunique_particles) == 0 and len(lmulti_particles) == 0:
-        #         raise ValueError("\"particles\" must have either all the same name or all different names!")
         if 'parameters' in self._job_list[jn0][0]:
             largs = self._job_list[jn0][0]['parameters']
             lunique_parameters = {kk:vv for kk,vv in largs.items() if not any([self._job_list[jn][0]['parameters'][kk] != largs[kk] for jn in job_list[1:]])}
             lmulti_parameters  = {kk:vv for kk,vv in largs.items() if kk not in lunique_parameters}
-            # if any([(kk not in lunique_parameters) and (kk not in lmulti_parameters) for kk in largs]):
-            #     raise ValueError("\"parameters\" elements must have either all the same name or all different names!")
         if 'outputfiles' in self._job_list[jn0][0]:
             largs = self._job_list[jn0][0]['outputfiles']
             lunique_outputfiles = {kk:vv for kk,vv in largs.items() if not any([self._job_list[jn][0]['outputfiles'][kk] != largs[kk] for jn in job_list[1:]])}
             lmulti_outputfiles  = {kk:vv for kk,vv in largs.items() if kk not in lunique_outputfiles}
-            # if any([(kk not in lunique_outputfiles) and (kk not in lmulti_outputfiles) for kk in largs]):
-            #     raise ValueError("\"outputfiles\" elements must have either all the same name or all different names!")
         # Creation of htcondor executable file
         executable_file = self.work_directory / f"{self._name}.htcondor.sh"
         with open(executable_file, 'w') as fid:
             fid.write(f"#!/bin/bash\n\n")
             # Add arguments to the job
             fid.write("job_name=${1};\n")
-            # for ii,kk in enumerate({**lmulti_inputfiles,**lmulti_particles,**lmulti_parameters,**lmulti_outputfiles}):
             for ii,kk in enumerate({**lmulti_inputfiles,**lmulti_parameters,**lmulti_outputfiles}):
                 fid.write(kk+"=${"+str(ii+2)+"};\n")
             fid.write(f"\nset --;\n\n")
@@ -628,16 +572,12 @@ class JobManager:
             # List arguments for the python script
             job_args  = [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_inputfiles]
             job_args += [f"{kk}='{Path(vv).name}'" for kk,vv in lunique_inputfiles.items()]
-            # job_args += [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_particles]
-            # job_args += [f"{kk}='"+Path(vv).stem+".${job_name}"+Path(vv).suffix+"'" for kk,vv in lunique_particles.items()]
             job_args += [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_parameters]
             job_args += [f"{kk}='{vv}'" for kk,vv in lunique_parameters.items()]
             job_args += [f"{kk}='"+"${"+kk+"}'" for kk in lmulti_outputfiles]
-            # job_args += [f"{kk}='"+Path(vv).stem+".${job_name}"+Path(vv).suffix+"'" for kk,vv in lunique_outputfiles.items()]
             job_args += [f"{kk}='"+str(vv)+"'" for kk,vv in lunique_outputfiles.items()]
             job_args = ", ".join(job_args)
             # Execute python script
-            # fid.write(f"\npython {Path('xaux/jobmanager.py')} {self._job_class_name} {self._job_class_script} {job_args}\n")
             fid.write(f"\npython -c \"from {self._job_class_script.stem} import {self._job_class_name}; {self._job_class_name}.run({job_args})\";\n")
             # last steps
             fid.write('echo;\n')
@@ -646,10 +586,6 @@ class JobManager:
             fid.write('ls;\n')
             fid.write('exit 0;\n')
         # Create main htcondor submission file
-        # default_inputdir  = str(self._input_directory)+'/'  if self._input_directory  is not None else ''
-        # if self._output_directory is None and any([Path(vv).parent == '.' for jn in job_list for vv in self._job_list[jn][0]['outputfiles'].values()]):
-        #     raise ValueError("Output directory must be defined!")
-        # default_outputdir = str(self._output_directory)+'/' if self._output_directory is not None else ''
         with open(self.work_directory / f"{self._name}.htcondor.sub", 'w') as fid:
             # Set general parameters
             fid.write(f"universe           = {kwargs.pop('universe','vanilla')}\n")
@@ -675,41 +611,17 @@ class JobManager:
             linputs += ', '.join([vv for vv in lunique_inputfiles.values()])
             if len(lmulti_inputfiles) != 0:
                 linputs += ', ' if (len(linputs) != 0) else ''
-                # linputs += '$('+'), $('.join([f'{kk}_path)/$({kk}_name' for kk in lmulti_inputfiles])+')'
                 linputs += '$('+'), $('.join([f"{kk}_full" for kk in lmulti_inputfiles])+')'
-            # if len(lunique_particles) != 0:
-            #     for vv in lunique_particles.values():
-            #         if len(linputs) != 0:
-            #             linputs += ', '
-            #         if Path(vv).parent != '.':
-            #             linputs += f"{Path(vv).parent / (Path(vv).stem+'.$'+job_name+Path(vv).suffix)}"
-            #         else:
-            #             linputs += f"{Path(default_inputdir, (Path(vv).stem+'.$'+job_name+Path(vv).suffix))}"
-            #     # linputs += ', '.join([f"{default_inoutfiles}{Path(vv).stem}.'${job_name}'{Path(vv).suffix}" for vv in lunique_particles.values()])
-            # if len(lmulti_particles) != 0:
-            #     if len(linputs) != 0:
-            #         linputs += ', '
-            #     # linputs += '$('+'), $('.join([f'{kk}_path)/$({kk}_name' for kk in lmulti_particles])+')'
-            #     linputs += '$('+'), $('.join([kk for kk in lmulti_particles])+')'
             fid.write(f"transfer_input_files    = {linputs}\n")
             # Set output files transfer
             loutputs = ''
             if 'outputfiles' in self._job_list[jn0][0]:
                 loutputs += ', '.join([vv for vv in lunique_outputfiles.values()])
-                # for vv in lunique_outputfiles.values():
-                #     if Path(vv).parent != '.': 
-                #         vv = f"{Path(vv).parent / (Path(vv).stem+'.$(job_name).$(Step)'+Path(vv).suffix)}"
-                #     else:
-                #         vv = f"{Path(default_outputdir, (Path(vv).stem+'.$(job_name).$(Step)'+Path(vv).suffix))}"
-                #     loutputs += f"{vv}, "
                 if len(lmulti_outputfiles) != 0:
-                    # loutputs += '$('+'),$('.join([f'{kk}_path)/$({kk}_name' for kk in lmulti_outputfiles])+')'
                     loutputs += '$('+'),$('.join([kk for kk in lmulti_outputfiles])+')'
                 fid.write(f"transfer_output_files   = {loutputs}\n")
                 fid.write(f"when_to_transfer_output = ON_EXIT\n")
             # Create the list of arguments and the queue
-            # lmuliargs = {**lmulti_inputfiles,**lmulti_particles,**lmulti_parameters,**lmulti_outputfiles}
-            # lmuliargs = {**lmulti_inputfiles,**lmulti_parameters,**lmulti_outputfiles}
             section_arguments = "arguments = $(job_name)"
             section_queue_name = "job_name"
             section_queue_list = ""
@@ -735,50 +647,13 @@ class JobManager:
             fid.write(f"{section_arguments}\n")
             fid.write(f"queue {self.step} {section_queue_name} from (\n")
             fid.write(f"{section_queue_list})\n")
-            # if len(lmuliargs)!=0:
-            #     # Set list arguments to feed the script
-            #     fid.write(f"arguments = $(job_name) $({') $('.join([kk for kk in lmuliargs])})\n")
-            #     # Add queue description
-            #     fid.write(f"queue {self.step} job_name, {', '.join(lmuliargs)} from (\n")
-            #     for job_name in job_list:
-            #         fid.write(f"    {job_name}")
-            #         # Add input files to the queue description
-            #         for kk in lmulti_inputfiles:
-            #             vv = Path(self._job_list[job_name][0]['inputfiles'][kk])
-            #             if str(vv.parent) != '.':
-            #                 fid.write(f"    {vv}")
-            #             else:
-            #                 fid.write(f"    {Path(default_inputdir / vv)}")
-            #             # fid.write(f"    {self._job_list[job_name][0]['inputfiles'][kk]}")
-            #         # Add particles to the queue description
-            #         # if len(lmulti_particles) != 0:
-            #         #     vv = Path(self._job_list[job_name][0]['particles'])
-            #         #     if str(vv.parent) != '.':
-            #         #         fid.write(f"    {vv}")
-            #         #     else:
-            #         #         fid.write(f"    {Path(default_inputdir / vv)}")
-            #         # Add parameters to the queue description
-            #         for kk in lmulti_parameters:
-            #             fid.write(f"    {self._job_list[job_name][0]['parameters'][kk]}")
-            #         # Add output files to the queue description
-            #         for kk,vv in lmulti_outputfiles.items():
-            #             if Path(vv).parent != '.':
-            #                 fid.write(f"    {Path(vv).parent / (Path(vv).stem+'.$(job_name).$(Step)'+Path(vv).suffix)}")
-            #             else:
-            #                 fid.write(f"    {Path(default_outputdir, (Path(vv).stem+'.$(job_name).$(Step)'+Path(vv).suffix))}")
-            #         fid.write(f"\n")
-            #     fid.write(f")\n")
-            # else:
-            #     fid.write(f"queue {self.step} job_name from (\n")
-            #     for job_name in job_list:
-            #         fid.write(f"    {job_name}\n")
-            #     fid.write(f")\n")
         # Submit the jobs to HTCONDOR
         if auto:
-            # os.system(f"condor_submit {self.work_directory / (self._name+'.htcondor.sub')}")
+            print(f"Submit: `condor_submit {self.work_directory / (self._name+'.htcondor.sub')}`")
             subprocess.check_output(['condor_submit', str(self.work_directory / (self._name+'.htcondor.sub')) ])
+            print(f"Submit done.')}`")
         else:
-            print(f"condor_submit {self.work_directory / (self._name+'.htcondor.sub')}")
+            print(f"please run: `condor_submit {self.work_directory / (self._name+'.htcondor.sub')}`")
         # Update the job list
         for job_name in job_list:
             self._job_list[job_name][1] = True
@@ -797,12 +672,10 @@ class JobManager:
         
     def _status_htcondor(self, **kwargs):#job_list=None, 
         self.read_job_list()
-        # if job_list is None:
         job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
         # Check if submission still running
-        # similation_status = os.system(f"condor_q {self._name}")
         similation_status = subprocess.run(['ls', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8')
         if self._name in similation_status:
             print(f"{self._name} is still running!")
@@ -895,10 +768,6 @@ class JobManager:
         for job_name in job_list:
             job_description = self._job_list.pop(job_name)
             # TODO: Work on the removal of files
-            # if 'particles' in job_description[0]:
-            #     particles = Path(job_description[0]['particles'])
-            #     if particles.exists() and particles.parent == self.job_specific_input_directory:
-            #         particles.unlink()
             # if 'outputfiles' in job_description[0]:
             #     for ff in job_description[0]['outputfiles'].values():
             #         ff = Path(ff)
@@ -915,42 +784,35 @@ class JobManager:
 
 
 
-
-# arg = {
-#     'job0': {'inputfiles':{'line': "line.json", 'colldb': "colldb.yaml"}, "parameters":{'num_particles': 50000,'lmtype': "B1H", 'num_turns': 200}},
-#     'job1': {'inputfiles':{'line': "line.json", 'colldb': "colldb.yaml"}, "parameters":{'num_particles': 50000,'lmtype': "B1H", 'num_turns': 200}},
-#     'job2': {'inputfiles':{'line': "line.json", 'colldb': "colldb.yaml"}, "parameters":{'num_particles': 50000,'lmtype': "B1H", 'num_turns': 200}},
-# }
-
 # https://htcondor.readthedocs.io/en/latest/users-manual/submitting-a-job.html
 # https://htcondor.readthedocs.io/en/latest/users-manual/file-transfer.html
 # https://htcondor.readthedocs.io/en/latest/
 # https://htcondor.readthedocs.io/en/latest/man-pages/condor_submit.html
 
 
-def main(job_class_name, job_class_script, **arg):
-        from importlib import import_module
-        import time
-        start_time = time.time()
-        import xdeps as xd
-        import xfields as xf
-        if 'xcoll' in sys.modules:
-            import xcoll as xc
-        job_class = import_module(job_class_script, package=job_class_name)
-        job_class.run(**arg)
-        print(f"Total calculation time {time.time()-start_time:.2f}s")
+# def main(job_class_name, job_class_script, **arg):
+#         from importlib import import_module
+#         import time
+#         start_time = time.time()
+#         import xdeps as xd
+#         import xfields as xf
+#         if 'xcoll' in sys.modules:
+#             import xcoll as xc
+#         job_class = import_module(job_class_script, package=job_class_name)
+#         job_class.run(**arg)
+#         print(f"Total calculation time {time.time()-start_time:.2f}s")
 
-if __name__ == '__main__':
-    print("Test:")
-    print(f"{DAJob.__name__=}")
-    print(f"{os.path.abspath(sys.modules[DAJob.__module__].__file__)=}")
-    print(f"{xt.Line.__name__=}")
-    print(f"{os.path.abspath(sys.modules[xt.Line.__module__].__file__)=}")
-    print(f"{str(Path(xt.__file__).parent)=}")
-    print("end")
+# if __name__ == '__main__':
+#     print("Test:")
+#     print(f"{DAJob.__name__=}")
+#     print(f"{os.path.abspath(sys.modules[DAJob.__module__].__file__)=}")
+#     print(f"{xt.Line.__name__=}")
+#     print(f"{os.path.abspath(sys.modules[xt.Line.__module__].__file__)=}")
+#     print(f"{str(Path(xt.__file__).parent)=}")
+#     print("end")
 
-    # # Executable for the job class
-    # main(sys.argv[1], # job_class_name 
-    #      sys.argv[2], # job_class_script
-    #      **dict(arg.split('=') for arg in sys.argv[3:]) # job arguments
-    #      )
+#     # # Executable for the job class
+#     # main(sys.argv[1], # job_class_name 
+#     #      sys.argv[2], # job_class_script
+#     #      **dict(arg.split('=') for arg in sys.argv[3:]) # job arguments
+#     #      )
