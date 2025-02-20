@@ -375,8 +375,9 @@ class JobManager:
         for kk, vv in metadata.items():
             setattr(self, "_"+kk, vv)
         # Import the job class
-        from importlib import import_module
-        self._job_class = import_module(self._job_class_script, package=self._job_class_name)
+        # TODO: Find how to import the class from the script
+        # from importlib import import_module
+        # self._job_class = import_module(self._job_class_script, package=self._job_class_name)
 
     def save_metadata(self):
         if not self.work_directory.exists():
