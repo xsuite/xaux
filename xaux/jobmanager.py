@@ -584,8 +584,22 @@ class JobManager:
             fid.write('exit 0;\n')
         # Create output job directory and clean it if not empty
         for job_name in job_list:
-            for ss in self.step:
-                job_output_directory = self.output_directory / (self._name+'.htcondor.{job_name}.{ss}')
+            if self.step >0 :
+                for ss in range(self.step):
+                    job_output_directory = self.output_directory / (self._name+'.htcondor.{job_name}.{ss}')
+                    if not job_output_directory.exists():
+                        job_output_directory.mkdir(parents=True)
+                    else:
+                        list_inside_job_output_directory = list(job_output_directory.glob('*'))
+                        if len(list_inside_job_output_directory) != 0:
+                            raise FileExistsError(f"Output directory {job_output_directory} is not empty!")
+                        #     for ff in list_inside_job_output_directory:
+                        #         if ff.is_dir():
+                        #             raise ValueError(f"Output directory {job_output_directory} is not empty!")
+                        #         else:
+                        #             ff.unlink()
+            else:
+                job_output_directory = self.output_directory / (self._name+'.htcondor.{job_name}.0')
                 if not job_output_directory.exists():
                     job_output_directory.mkdir(parents=True)
                 else:
@@ -597,6 +611,7 @@ class JobManager:
                     #             raise ValueError(f"Output directory {job_output_directory} is not empty!")
                     #         else:
                     #             ff.unlink()
+
         # Create main htcondor submission file
         with open(self.work_directory / f"{self._name}.htcondor.sub", 'w') as fid:
             # Set general parameters
