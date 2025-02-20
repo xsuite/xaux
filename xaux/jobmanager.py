@@ -582,15 +582,30 @@ class JobManager:
             fid.write('echo "ls:";\n')
             fid.write('ls;\n')
             fid.write('exit 0;\n')
+        # Create output job directory and clean it if not empty
+        for job_name in job_list:
+            for ss in self.step:
+                job_output_directory = self.output_directory / (self._name+'.htcondor.{job_name}.{ss}')
+                if not job_output_directory.exists():
+                    job_output_directory.mkdir(parents=True)
+                else:
+                    list_inside_job_output_directory = list(job_output_directory.glob('*'))
+                    if len(list_inside_job_output_directory) != 0:
+                        raise FileExistsError(f"Output directory {job_output_directory} is not empty!")
+                    #     for ff in list_inside_job_output_directory:
+                    #         if ff.is_dir():
+                    #             raise ValueError(f"Output directory {job_output_directory} is not empty!")
+                    #         else:
+                    #             ff.unlink()
         # Create main htcondor submission file
         with open(self.work_directory / f"{self._name}.htcondor.sub", 'w') as fid:
             # Set general parameters
             fid.write(f"universe           = {kwargs.pop('universe','vanilla')}\n")
             fid.write(f"executable         = {self.work_directory / (self._name+'.htcondor.sh')}\n")
             fid.write(f"output_destination = {self.output_directory / (self._name+'.htcondor.$(job_name).$(Step)')}\n")
-            fid.write(f"output             = {(self._name+'.htcondor.$(ClusterId).$(ProcId).$(job_name).$(Step).out')}\n")
-            fid.write(f"error              = {(self._name+'.htcondor.$(ClusterId).$(ProcId).$(job_name).$(Step).err')}\n")
-            fid.write(f"log                = {(self._name+'.htcondor.$(ClusterId).$(ProcId).$(job_name).$(Step).log')}\n")
+            fid.write(f"output             = {self.output_directory / (self._name+'.htcondor.$(job_name).$(Step)') / (self._name+'.htcondor.$(ClusterId).$(ProcId).$(job_name).$(Step).out')}\n")
+            fid.write(f"error              = {self.output_directory / (self._name+'.htcondor.$(job_name).$(Step)') / (self._name+'.htcondor.$(ClusterId).$(ProcId).$(job_name).$(Step).err')}\n")
+            fid.write(f"log                = {self.output_directory / (self._name+'.htcondor.$(job_name).$(Step)') / (self._name+'.htcondor.$(ClusterId).$(ProcId).$(job_name).$(Step).log')}\n")
             # Set general parameters
             fid.write(f"batch_name         = {self._name}\n")
             fid.write(f"on_exit_remove     = {kwargs.pop('on_exit_remove','(ExitBySignal == False) && (ExitCode == 0)')}\n")
