@@ -453,7 +453,7 @@ class JobManager:
             elif isinstance(vv, dict):
                 suffix = '.json'
                 # If it is a dictionary and save it into a file
-                if isinstance(vv[vv.keys()[0]], (xt.Line, xt.Multiline, xp.Particles)):
+                if isinstance(vv[list(vv.keys())[0]], (xt.Line, xt.Multiline, xp.Particles)):
                     # If the dictionary contains a line or particles object, transform those line into dict
                     data = {}
                     for kkk, in vv.keys():
@@ -789,7 +789,7 @@ class JobManager:
         if self._name in similation_status:
             print(f"WARNING: {self._name} is still running! Wait for the end of the simulation before retrieving the results!")
         # Retrieve the results of the jobs
-        if 'outputfiles' in self._job_list[self._job_list.keys()[0]][0]:
+        if 'outputfiles' in self._job_list[list(self._job_list.keys())[0]][0]:
             results = {kk:self._job_list[kk][0]['outputfiles'] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
             for job_name in results:
                 for kk,ff in results[job_name].items():
