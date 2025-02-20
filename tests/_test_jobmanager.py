@@ -7,7 +7,7 @@ import pytest
 import json
 import sys
 from pathlib import Path
-from xaux.jobmanager import JobManager, DAJob
+from xaux import JobManager, DAJob
 import pandas as pd
 
 

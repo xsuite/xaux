@@ -8,3 +8,4 @@ from .fs import FsPath, LocalPath, EosPath, AfsPath, afs_accessible, eos_accessi
 from .dev_tools import import_package_version  # Stub to get dev_tools in the namespace
 from .tools import singleton, ClassProperty, ClassPropertyMeta, timestamp, ranID, system_lock, get_hash, \
                    ProtectFile, ProtectFileError
+from .automation import JobTemplate, DAJob, LossMapPencilJob, JobManager

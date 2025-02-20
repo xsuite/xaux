@@ -1,212 +1,18 @@
-import json
+# copyright ############################### #
+# This file is part of the Xaux Package.    #
+# Copyright (c) CERN, 2025.                 #
+# ######################################### #
+
 import sys
-import os
-from pathlib import Path
+import json
 import subprocess
+import numpy as np
+import pandas as pd
+from pathlib import Path
 
-import xobjects as xo
-import xtrack as xt
-import xpart as xp
-
-# from ..tools.singleton import singleton
-
-# @singleton
-class JobTemplate:
-    def __init__(self, **kwargs):
-        self._context = kwargs.get("_context", None)
-        self.co_search_at = kwargs.get("co_search_at", None)
-        self.line = kwargs.get("line", None)
-        self.particles = kwargs.get("particles", None)
-        if hasattr(self, 'validate_kwargs'):
-            self.validate_kwargs(**kwargs)
-
-    @property
-    def line(self):
-        return self._line
-
-    @line.setter
-    def line(self, line):
-        if isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
-            self._line = line
-        elif isinstance(line, (str, Path)):
-            line = Path(line)
-            if not line.exists():
-                raise ValueError(f"Line file {line} does not exist!")
-            self._line = xt.Line.from_json(line, _context=self._context)
-        elif line is not None:
-            raise ValueError(f"Invalid line type {type(line)}")
-        else:
-            self._line = None
-
-    @property
-    def particles(self):
-        return self._particles
-
-    @particles.setter
-    def particles(self, particles):
-        if isinstance(particles, xt.Particles):
-            self._particles = particles
-        elif isinstance(particles, (str, Path)):
-            particles = Path(particles) # TODO: verify context is consistent and adapt if needed
-            if not particles.exists():
-                raise ValueError(f"particles file {particles} does not exist!")
-            if particles.suffix == '.json':
-                # TODO: what if these are normalised particle coordinates?
-                with open(particles, 'r') as fid:
-                    self._particles= xp.Particles.from_dict(json.load(fid),
-                                            _context=self._context)
-            elif particles.suffix == '.parquet':
-                # TODO: what if these are normalised particle coordinates?
-                import pandas as pd
-                with open(particles, 'rb') as fid:
-                    self._particles = xp.Particles.from_pandas(
-                        pd.read_parquet(fid, engine="pyarrow"), _context=self._context)
-            else:
-                raise ValueError(f"Unknown file extension {particles.suffix} for Particles!")
-        elif particles is not None:
-            raise ValueError(f"Invalid particles type {type(particles)}")
-        else:
-            self._particles = None
-
-    @classmethod
-    def run(cls, **kwargs):
-        self = cls(**kwargs)
-        if hasattr(self, 'generate_line'):
-            self.generate_line(**kwargs)
-        if hasattr(self, 'pre_build'):
-            self.pre_build(**kwargs)
-        self.line.build_tracker(_context=self._context)
-        if hasattr(self, 'post_build'):
-            self.post_build(**kwargs)
-        if hasattr(self, 'generate_particles'):
-            self.generate_particles(**kwargs)
-        if hasattr(self, 'pre_track'):
-            self.pre_track(**kwargs)
-        self.track(**kwargs)
-        if hasattr(self, 'post_track'):
-            self.post_track(**kwargs)
-        self.generate_output(**kwargs)
-
-    def track(self, **kwargs):
-        num_turns = int(kwargs.get("num_turns", 1))
-        ele_start = kwargs.get("ele_start", None)
-        ele_stop = kwargs.get("ele_stop", None)
-        with_progress = bool(kwargs.get("with_progress", True))
-        self.line.track(self.particles, num_turns=num_turns, ele_start=ele_start, ele_stop=ele_stop, with_progress=with_progress)
-
-    def generate_output(self, **kwargs):
-        output_file = Path(kwargs.get("output_file"))
-        if output_file.exists():
-            raise ValueError(f"Output file {output_file} already exists!")
-        if not output_file.parent.exists():
-            output_file.parent.mkdir(parents=True)
-        if output_file.suffix == '.json':
-            with open(output_file, 'w') as fid:
-                json.dump(self.particles.to_dict(), fid, cls=xo.JEncoder)
-        elif output_file.suffix == '.parquet':
-            with open(output_file, 'wb') as pf:
-                (self.particles.to_pandas()).to_parquet(pf, index=True, engine="pyarrow")
+from .template import JobTemplate
 
 
-
-# Job template for Dynamic Aperture analysis
-# ==========================================================================================
-class DAJob(JobTemplate):
-    def __init__(self, **kwargs):
-        self._seed = kwargs.pop("seed", None)
-        super().__init__(**kwargs)
-
-    @property
-    def seed(self):
-        return self._seed
-
-    @property
-    def line(self):
-        return JobTemplate.line.fget(self)
-
-    @line.setter
-    def line(self, line):
-        if self.seed is not None:
-            if isinstance(line, (xt.Line,xt.Multiline,xt.Environment)):
-                raise ValueError("Line cannot be set directly if 'seed' is provided!")
-            elif isinstance(line, (str, Path)):
-                line = Path(line)
-                if not line.exists():
-                    raise ValueError(f"Line file {line} does not exist!")
-                with open(line, 'r') as fid:
-                    line = json.load(fid)
-                self._line = xt.Line.from_dict(line[self.seed])
-            elif isinstance(line, dict):
-                if isinstance(line[self.seed], dict):
-                    self._line = xt.Line.from_dict(line[self.seed])
-                elif isinstance(line[self.seed], (xt.Line, xt.Multiline, xt.Environment)):
-                    self._line = line[self.seed]
-                else:
-                    raise ValueError(f"Invalid seed line type {type(line['seed'])} for seed {self.seed}!")
-            elif line is not None:
-                raise ValueError(f"Invalid line type {type(line)}")
-        else:
-            JobTemplate.line.fset(self, line)
-
-
-
-# Job template for loss map calculation
-# ==========================================================================================
-if 'xcoll' in sys.modules:
-    import xcoll as xc # type: ignore
-    import numpy as np
-
-    class LossMapPencilJob(JobTemplate):
-        def validate_kwargs(self, **kwargs):
-            if "colldb" not in kwargs:
-                raise ValueError("No collimation database provided!")
-            if "lmtype" not in kwargs:
-                raise ValueError("No loss map type provided!")
-            elif kwargs['lmtype'] not in ['B1H', 'B1V', 'B2H', 'B2V']:
-                raise ValueError("Invalid loss map type!")
-            lmtype = kwargs.pop('lmtype')
-            self.beam = int(lmtype[1])
-            self.plane = lmtype[2]
-            if "num_particles" not in kwargs:
-                raise ValueError("No number of particles provided!")
-
-        def pre_build(self, **kwargs):
-            self.colldb = xc.CollimatorDatabase.from_yaml(kwargs["colldb"], beam=self.beam)
-            self.colldb.install_everest_collimators(line=self.line, verbose=True)
-            print('\nAperture model check after introducing collimators:')
-            df_with_coll = self.line.check_aperture()
-            assert not np.any(df_with_coll.has_aperture_problem)
-
-        def post_build(self, **kwargs):
-            self.line.collimators.assign_optics()
-
-        def generate_particles(self, **kwargs):
-            tcp  = f"tcp.{'c' if self.plane=='H' else 'd'}6{'l' if f'{self.beam}'=='1' else 'r'}7.b{self.beam}"
-            self.particles = self.line[tcp].generate_pencil(kwargs['num_particles'])
-
-        def pre_track(self, **kwargs):
-            self.line.scattering.enable()
-
-        def post_track(self, **kwargs):
-            self.line.scattering.disable()
-            line_is_reversed = True if f'{self.beam}' == '2' else False
-            self.ThisLM = xc.LossMap(self.line, line_is_reversed=line_is_reversed, part=self.particles)
-
-        def generate_output(self, **kwargs):
-            lossmap_file = kwargs.get("lossmap_file", None)
-            if lossmap_file is None:
-                lossmap_file = Path(f'lossmap_B{self.beam}{self.plane}.json')
-            self.ThisLM.to_json(file=lossmap_file)
-            summary_file = kwargs.get("summary_file", None)
-            if summary_file is None:
-                summary_file = Path(f'coll_summary_B{self.beam}{self.plane}.out')
-            # Save a summary of the collimator losses to a text file
-            self.ThisLM.save_summary(file=summary_file)
-            print(self.ThisLM.summary)
-
-
-# Job Manager
-# ==========================================================================================
 class JobManager:
     job_class = JobTemplate
     def __init__(self, *arg, **kwargs):
@@ -432,8 +238,7 @@ class JobManager:
         self.save_job_list()
 
     def _job_creation(self, job_name, job_description) -> list:
-        import pandas as pd
-        import numpy as np
+        import xtrack as xt
         if not self.job_specific_input_directory.exists():
             self.job_specific_input_directory.mkdir(parents=True)
         # Fix input files format in order to have only strings and save the data in files if needed
@@ -442,7 +247,7 @@ class JobManager:
                 # If it is a line object and save it into a file
                 data   = vv.to_dict()
                 suffix = '.json'
-            elif isinstance(vv, xp.Particles):
+            elif isinstance(vv, xt.Particles):
                 # If it is a particles object and save it into a file
                 data   = vv.to_pandas()
                 suffix = '.parquet'
@@ -453,7 +258,7 @@ class JobManager:
             elif isinstance(vv, dict):
                 suffix = '.json'
                 # If it is a dictionary and save it into a file
-                if isinstance(vv[list(vv.keys())[0]], (xt.Line, xt.Multiline, xp.Particles)):
+                if isinstance(vv[list(vv.keys())[0]], (xt.Line, xt.Multiline, xt.Particles)):
                     # If the dictionary contains a line or particles object, transform those line into dict
                     data = {}
                     for kkk, in vv.keys():
@@ -475,6 +280,7 @@ class JobManager:
             # Save the data in job_specific_input_directory
             new_filename = (self.job_specific_input_directory / f"{self._name}.{job_name}.{kk}{suffix}").resolve()
             if suffix == '.json':
+                import xobjects as xo
                 with open(new_filename, 'wb') as pf:
                     json.dump(data, pf, cls=xo.JEncoder, indent=True, sort_keys=False)
             elif suffix == '.parquet':
@@ -551,6 +357,11 @@ class JobManager:
             fid.write(f"    exit $retVal;\n")
             fid.write(f"fi\n\n")
             # Copy Xsuite classes locally
+            import xobjects as xo
+            import xdeps as xd
+            import xtrack as xt
+            import xpart as xp
+            import xfields as xf
             for xclass in [xo, xd, xt, xp, xf]:
                 fid.write(f"cp -r {str(Path(xclass.__file__).parent)} .;\n")  # Copy of main xobjects
             fid.write(f"cp -r {str(Path(sys.modules[JobTemplate.__module__].__file__).parent)} .;\n") # Copy of xaux
