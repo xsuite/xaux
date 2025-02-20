@@ -586,7 +586,7 @@ class JobManager:
         for job_name in job_list:
             if self.step >0 :
                 for ss in range(self.step):
-                    job_output_directory = self.output_directory / (self._name+'.htcondor.{job_name}.{ss}')
+                    job_output_directory = self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
                     if not job_output_directory.exists():
                         job_output_directory.mkdir(parents=True)
                     else:
@@ -599,7 +599,7 @@ class JobManager:
                         #         else:
                         #             ff.unlink()
             else:
-                job_output_directory = self.output_directory / (self._name+'.htcondor.{job_name}.0')
+                job_output_directory = self.output_directory / (self._name+f'.htcondor.{job_name}.0')
                 if not job_output_directory.exists():
                     job_output_directory.mkdir(parents=True)
                 else:
