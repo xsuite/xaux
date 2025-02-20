@@ -320,18 +320,18 @@ class JobManager:
 
     @property
     def work_directory(self):
-        return self._work_directory
+        return Path(self._work_directory)
 
     @work_directory.setter
     def work_directory(self, path: Path|str):
         path = Path(path)
         if not path.exists():
             path.mkdir(parents=True)
-        self._work_directory = path.resolve()
+        self._work_directory = str(path.resolve())
 
     @property
     def input_directory(self):
-        return self._input_directory
+        return Path(self._input_directory)
 
     @input_directory.setter
     def input_directory(self, path: Path|str|None):
@@ -341,18 +341,18 @@ class JobManager:
             path = Path(path).resolve()
             if not path.exists():
                 raise ValueError(f"Input directory {path} does not exist!")
-            self._input_directory = path
+            self._input_directory = str(path)
 
     @property
     def output_directory(self):
-        return self._output_directory
+        return Path(self._output_directory)
 
     @output_directory.setter
     def output_directory(self, path: Path|str):
         path = Path(path)
         if not Path(path).exists():
             Path(path).mkdir(parents=True)
-        self._output_directory = Path(path).resolve()
+        self._output_directory = str(Path(path).resolve())
 
     @property
     def metafile(self):
