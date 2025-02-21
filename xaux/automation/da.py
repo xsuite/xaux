@@ -12,6 +12,10 @@ from .template import JobTemplate
 # Job template for Dynamic Aperture analysis
 # ==========================================
 class DAJob(JobTemplate):
+    """Job template for Dynamic Aperture analysis.
+    Only difference with the JobTemplate is that the line can have seeds.
+    """
+
     def __init__(self, **kwargs):
         self._seed = kwargs.pop("seed", None)
         super().__init__(**kwargs)
