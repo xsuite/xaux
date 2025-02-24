@@ -344,7 +344,7 @@ class JobManager:
             fid.write(f"#!/bin/bash\n\n")
             # Add arguments to the job
             fid.write("job_name=${1};\n")
-            fid.write("Step=${2});\n")
+            fid.write("Step=${2};\n")
             for ii,kk in enumerate({**lmulti_inputfiles,**lmulti_parameters,**lmulti_outputfiles}):
                 fid.write(kk+"=${"+str(ii+3)+"};\n")
             fid.write(f"\nset --;\n\n")
