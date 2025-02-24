@@ -6,7 +6,10 @@
 import json
 from pathlib import Path
 
-from .template import JobTemplate
+if __name__ == "__main__":
+    from xaux.automation.template import JobTemplate
+else:
+    from .template import JobTemplate
 
 
 # Job template for Dynamic Aperture analysis

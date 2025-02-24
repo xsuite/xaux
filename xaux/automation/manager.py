@@ -365,7 +365,7 @@ class JobManager:
             import xfields as xf
             for xclass in [xo, xd, xt, xp, xf]:
                 fid.write(f"cp -r {str(Path(xclass.__file__).parent)} .;\n")  # Copy of main xobjects
-            fid.write(f"cp -r {str(Path(sys.modules[JobTemplate.__module__].__file__).parent)} .;\n") # Copy of xaux
+            fid.write(f"cp -r {str(Path(sys.modules[JobTemplate.__module__].__file__).parent.parent)} .;\n") # Copy of xaux
             if 'xcoll' in sys.modules:
                 fid.write(f"cp -r {str(Path(xc.__file__).parent)} .;\n")      # Copy of xcoll if exists
             # Copy input files locally

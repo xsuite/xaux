@@ -6,7 +6,10 @@
 import json
 from pathlib import Path
 
-# from ..tools.singleton import singleton
+# if __name__ == "__main__":
+#     from xaux.tools.singleton import singleton
+# else:
+#     from ..tools.singleton import singleton
 
 # @singleton
 class JobTemplate:
