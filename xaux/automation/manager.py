@@ -474,10 +474,11 @@ class JobManager:
             # Set output files transfer
             loutputs = ''
             if 'outputfiles' in self._job_list[jn0][0]:
-                loutputs += ', '.join([vv for vv in lunique_outputfiles.values()])
-                if len(lmulti_outputfiles) != 0:
-                    loutputs += '$('+'),$('.join([kk for kk in lmulti_outputfiles])+')'
-                fid.write(f"transfer_output_files   = {loutputs}\n")
+                # TODO: fix file transfer to output directory
+                # loutputs += ', '.join([vv for vv in lunique_outputfiles.values()])
+                # if len(lmulti_outputfiles) != 0:
+                #     loutputs += '$('+'),$('.join([kk for kk in lmulti_outputfiles])+')'
+                # fid.write(f"transfer_output_files   = {loutputs}\n")
                 fid.write(f"when_to_transfer_output = ON_EXIT\n")
             # Create the list of arguments and the queue
             section_arguments = "arguments = $(job_name) $(Step)"
