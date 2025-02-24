@@ -343,9 +343,10 @@ class JobManager:
         with open(executable_file, 'w') as fid:
             fid.write(f"#!/bin/bash\n\n")
             # Add arguments to the job
-            fid.write("job_name=${1};\n")
+            fid.write("job_name=$\{1\};\n")
+            fid.write("Step=$\{2\});\n")
             for ii,kk in enumerate({**lmulti_inputfiles,**lmulti_parameters,**lmulti_outputfiles}):
-                fid.write(kk+"=${"+str(ii+2)+"};\n")
+                fid.write(kk+"=${"+str(ii+3)+"};\n")
             fid.write(f"\nset --;\n\n")
             fid.write(f"sleep 60;\n\n")
             # Load python environment
@@ -388,15 +389,27 @@ class JobManager:
             job_args = ", ".join(job_args)
             # Execute python script
             fid.write(f"\npython -c \"from {self._job_class_script.stem} import {self._job_class_name}; {self._job_class_name}.run({job_args})\";\n")
+            # Copy the outputs into the output directory
+            if len(lmulti_outputfiles) != 0 or len(lunique_outputfiles) != 0:
+                # TODO: check if possible to do this automatically with htcondor
+                out_args  = ["${"+kk+"}" for kk in lmulti_outputfiles]
+                out_args += [str(vv) for kk,vv in lunique_outputfiles.items()]
+                out_args  = " ".join(job_args)
+                if self.step > 0:
+                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.$\{job_name\}.$\{Step\}')};\n")
+                else:
+                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.$\{job_name\}.0')};\n")
             # last steps
-            fid.write('echo;\n')
+            fid.write('\necho;\n')
             fid.write('echo $( date )"    End job ${job_name}.";\n')
             fid.write('echo "ls:";\n')
             fid.write('ls;\n')
+            fid.write('echo "ls output_dir:";\n')
+            fid.write(f'ls {self.output_directory / (self._name+'.htcondor.$(job_name).0')};\n')
             fid.write('exit 0;\n')
         # Create output job directory and clean it if not empty
         for job_name in job_list:
-            if self.step >0 :
+            if self.step > 0 :
                 for ss in range(self.step):
                     job_output_directory = self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
                     if not job_output_directory.exists():
@@ -439,6 +452,7 @@ class JobManager:
             fid.write(f"requirements       = {kwargs.pop('requirements','Machine =!= LastRemoteHost')}\n")
             fid.write(f"max_retries        = {kwargs.pop('max_retries',3)}\n")
             fid.write(f"max_materialize    = {kwargs.pop('max_materialize',100)}\n")
+            fid.write(f"notification       = {kwargs.pop('notification','error')}\n")
             # Allowed JobFlavors: espresso, microcentury, longlunch, workday, tomorrow, testmatch, nextweek
             fid.write(f"MY.JobFlavour      = \"{kwargs.pop('JobFlavor','tomorrow')}\"\n")
             fid.write(f"MY.AccountingGroup = \"{kwargs.pop('accounting_group','group_u_BE.ABP.normal')}\"\n")
@@ -462,7 +476,7 @@ class JobManager:
                 fid.write(f"transfer_output_files   = {loutputs}\n")
                 fid.write(f"when_to_transfer_output = ON_EXIT\n")
             # Create the list of arguments and the queue
-            section_arguments = "arguments = $(job_name)"
+            section_arguments = "arguments = $(job_name) $(Step)"
             section_queue_name = "job_name"
             section_queue_list = ""
             if len(lmulti_inputfiles) != 0:
