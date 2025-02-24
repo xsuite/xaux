@@ -6,10 +6,14 @@
 import numpy as np
 from pathlib import Path
 
-if __name__ == "__main__":
-    from xaux.automation.template import JobTemplate
-else:
+# if __name__ == "__main__":
+#     from xaux.automation.template import JobTemplate
+# else:
+#     from .template import JobTemplate
+try:
     from .template import JobTemplate
+except ImportError:
+    from xaux.automation.template import JobTemplate
 
 
 class LossMapPencilJob(JobTemplate):

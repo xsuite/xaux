@@ -7,10 +7,15 @@ import json
 from pathlib import Path
 
 print(f"\n{__name__=}\n")
-if __name__ == "__main__":
-    from xaux.automation.template import JobTemplate
-else:
+# if __name__ == "__main__":
+#     from xaux.automation.template import JobTemplate
+# else:
+#     from .template import JobTemplate
+try:
     from .template import JobTemplate
+except ImportError:
+    from xaux.automation.template import JobTemplate
+
 
 
 # Job template for Dynamic Aperture analysis

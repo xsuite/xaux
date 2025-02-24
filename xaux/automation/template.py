@@ -10,6 +10,10 @@ from pathlib import Path
 #     from xaux.tools.singleton import singleton
 # else:
 #     from ..tools.singleton import singleton
+# try:
+#     from ..tools.singleton import singleton
+# except ImportError:
+#     from xaux.tools.singleton import singleton
 
 # @singleton
 class JobTemplate:
