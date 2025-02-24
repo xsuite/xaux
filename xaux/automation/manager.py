@@ -409,7 +409,7 @@ class JobManager:
             fid.write('echo "ls:";\n')
             fid.write('ls;\n')
             fid.write('echo "ls output_dir:";\n')
-            fid.write(f'ls {self.output_directory / (self._name+'.htcondor.$(job_name).0')};\n')
+            fid.write(f'ls {job_output_directory};\n')
             fid.write('exit 0;\n')
         # Create output job directory and clean it if not empty
         for job_name in job_list:
