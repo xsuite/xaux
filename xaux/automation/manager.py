@@ -393,12 +393,12 @@ class JobManager:
             if len(lmulti_outputfiles) != 0 or len(lunique_outputfiles) != 0:
                 # TODO: check if possible to do this automatically with htcondor
                 out_args  = ["${"+kk+"}" for kk in lmulti_outputfiles]
-                out_args += [str(vv) for kk,vv in lunique_outputfiles.items()]
+                out_args += [str(vv) for vv in lunique_outputfiles.values()]
                 out_args  = " ".join(job_args)
                 if self.step > 0:
-                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.$\{job_name\}.$\{Step\}')};\n")
+                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')}/;\n")
                 else:
-                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.$\{job_name\}.0')};\n")
+                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.0')}/;\n")
             # last steps
             fid.write('\necho;\n')
             fid.write('echo $( date )"    End job ${job_name}.";\n')
