@@ -343,8 +343,8 @@ class JobManager:
         with open(executable_file, 'w') as fid:
             fid.write(f"#!/bin/bash\n\n")
             # Add arguments to the job
-            fid.write("job_name=$\{1\};\n")
-            fid.write("Step=$\{2\});\n")
+            fid.write("job_name=${1};\n")
+            fid.write("Step=${2});\n")
             for ii,kk in enumerate({**lmulti_inputfiles,**lmulti_parameters,**lmulti_outputfiles}):
                 fid.write(kk+"=${"+str(ii+3)+"};\n")
             fid.write(f"\nset --;\n\n")
@@ -399,7 +399,7 @@ class JobManager:
                 # TODO: check if possible to do this automatically with htcondor
                 out_args  = ["${"+kk+"}" for kk in lmulti_outputfiles]
                 out_args += [str(vv) for vv in lunique_outputfiles.values()]
-                out_args  = " ".join(job_args)
+                out_args  = " ".join(out_args)
                 if self.step > 0:
                     job_output_directory = self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')
                 else:
