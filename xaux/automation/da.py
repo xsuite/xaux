@@ -6,7 +6,6 @@
 import json
 from pathlib import Path
 
-print(f"\n{__name__=}\n")
 if __name__ == "__main__" or __name__ == "da":
     from xaux.automation.template import JobTemplate
 else:
