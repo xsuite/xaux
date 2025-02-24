@@ -396,9 +396,13 @@ class JobManager:
                 out_args += [str(vv) for vv in lunique_outputfiles.values()]
                 out_args  = " ".join(job_args)
                 if self.step > 0:
-                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')}/;\n")
+                    job_output_directory = self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')
                 else:
-                    fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.0')}/;\n")
+                    job_output_directory = self.output_directory / (self._name+'.htcondor.${job_name}.0')
+                fid.write(f"\ncp {out_args} {job_output_directory}/;\n")
+                #     fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')}/;\n")
+                # else:
+                #     fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.0')}/;\n")
             # last steps
             fid.write('\necho;\n')
             fid.write('echo $( date )"    End job ${job_name}.";\n')
