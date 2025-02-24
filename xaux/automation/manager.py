@@ -389,6 +389,11 @@ class JobManager:
             job_args = ", ".join(job_args)
             # Execute python script
             fid.write(f"\npython -c \"from {self._job_class_script.stem} import {self._job_class_name}; {self._job_class_name}.run({job_args})\";\n")
+            # last steps
+            fid.write('\necho;\n')
+            fid.write('echo $( date )"    End job ${job_name}.";\n')
+            fid.write('echo "ls:";\n')
+            fid.write('ls;\n')
             # Copy the outputs into the output directory
             if len(lmulti_outputfiles) != 0 or len(lunique_outputfiles) != 0:
                 # TODO: check if possible to do this automatically with htcondor
@@ -403,13 +408,8 @@ class JobManager:
                 #     fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')}/;\n")
                 # else:
                 #     fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.0')}/;\n")
-            # last steps
-            fid.write('\necho;\n')
-            fid.write('echo $( date )"    End job ${job_name}.";\n')
-            fid.write('echo "ls:";\n')
-            fid.write('ls;\n')
-            fid.write('echo "ls output_dir:";\n')
-            fid.write(f'ls {job_output_directory};\n')
+                fid.write('\necho "ls output_dir:";\n')
+                fid.write(f'ls {job_output_directory};\n')
             fid.write('exit 0;\n')
         # Create output job directory and clean it if not empty
         for job_name in job_list:
