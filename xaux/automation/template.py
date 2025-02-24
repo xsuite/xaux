@@ -6,7 +6,7 @@
 import json
 from pathlib import Path
 
-# if __name__ == "__main__":
+# if __name__ == "__main__" or __name__ == "template":
 #     from xaux.tools.singleton import singleton
 # else:
 #     from ..tools.singleton import singleton
