@@ -560,7 +560,7 @@ class JobManager:
             if job_description[1]:
 # DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 if job_name == "seed1-0":
-                    print(f"{job_name=}")
+                    print(f"\n{job_name=}")
                     print(f"{job_description[0]=}")
                     print(f"{'outputfiles' in job_description[0]=}")
                     print(f"{not job_description[2]=}")
@@ -572,8 +572,9 @@ class JobManager:
                         for ff in job_description[0]['outputfiles']:
 # DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                             if job_name == "seed1-0":
+                                print(f"{self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff=}")
                                 print(f"{(self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
-                                print(f"{not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
+                                print(f"{not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}\n")
 # DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                             if self.step > 0:
                                 for ss in range(self.step):
