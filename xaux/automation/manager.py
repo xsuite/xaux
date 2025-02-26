@@ -569,7 +569,7 @@ class JobManager:
                 if 'outputfiles' in job_description[0]:
                     if not job_description[2]:
                         all_outputfiles_present = True
-                        for ff in job_description[0]['outputfiles']:
+                        for ff in job_description[0]['outputfiles'].values():
 # DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                             if job_name == "seed1-0":
                                 print(f"{self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff=}")
