@@ -571,7 +571,8 @@ class JobManager:
                                 if not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists():
                                     all_outputfiles_present = False
                         self._job_list[job_name] = all_outputfiles_present
-                    print(f"   - Job {job_name} is {'not ' if not self._job_list[job_name][2] else ''}completed!")
+                    job_status = 'not ' if not self._job_list[job_name][2] else ''
+                    print(f"   - Job {job_name} is {job_status}completed!")
                 else:
                     all_outputfiles_present = True
                     if self.step > 0:
@@ -592,7 +593,8 @@ class JobManager:
                         elif len(list_ff) > 1:
                             raise ValueError(f"Multiple output files found for job {job_name}:\n{list_ff}")
                     self._job_list[job_name] = all_outputfiles_present
-                    print(f"   - Job {job_name} is {'not ' if not self._job_list[job_name][2] else ''}completed!")
+                    job_status = 'not ' if not self._job_list[job_name][2] else ''
+                    print(f"   - Job {job_name} is {job_status}completed!")
             else:
                 print(f"   - Job {job_name} is not submitted!")
         self.save_job_list()
