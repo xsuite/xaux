@@ -537,7 +537,7 @@ class JobManager:
         # Check if submission still running
         similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
         still_running = (self._name in similation_status)
-        if not still_running:
+        if still_running:
             similation_status_lines = similation_status.split('\n')[3:-6]
             similation_status_lines = [line.split() for line in similation_status_lines]
             header = similation_status_lines[0]
