@@ -529,7 +529,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
-    def _status_htcondor(self, **kwargs):
+    def _status_htcondor(self, verbose=True, **kwargs):
         self.read_job_list()
         job_list = self._job_list.keys()
         # Check if the job list is valid
@@ -537,45 +537,34 @@ class JobManager:
         # Check if submission still running
         similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
         still_running = (self._name in similation_status)
-        if still_running:
-            similation_status_lines = similation_status.split('\n')[3:-6]
-            similation_status_lines = [line.split() for line in similation_status_lines]
-            header = similation_status_lines[0]
-            similation_status_lines = [line for line in similation_status_lines[1:] if self._name in line][0]
-            status_htcondor = {hh:ss for hh,ss in zip(header,similation_status_lines)}
-            for kk,vv in status_htcondor.items():
-                status_htcondor[kk] = '0' if (vv == "_") else vv
-            done = status_htcondor.pop('DONE', '0')
-            run  = status_htcondor.pop('RUN',  '0')
-            idle = status_htcondor.pop('IDLE', '0')
-            hold = status_htcondor.pop('HOLD', '0')
-            total= status_htcondor.pop('TOTAL','0')
-            print(f"{self._name} is still running (Done: {done} / Run: {run} / Idle: {idle} / Hold: {hold} / Total: {total})!")
-        else:
-            print(f"{self._name} is not running!")
+        if verbose:
+            print(f"Checking status of {self._name}...")
+            if still_running:
+                similation_status_lines = similation_status.split('\n')[3:-6]
+                similation_status_lines = [line.split() for line in similation_status_lines]
+                header = similation_status_lines[0]
+                similation_status_lines = [line for line in similation_status_lines[1:] if self._name in line][0]
+                status_htcondor = {hh:ss for hh,ss in zip(header,similation_status_lines)}
+                for kk,vv in status_htcondor.items():
+                    status_htcondor[kk] = '0' if (vv == "_") else vv
+                done = status_htcondor.pop('DONE', '0')
+                run  = status_htcondor.pop('RUN',  '0')
+                idle = status_htcondor.pop('IDLE', '0')
+                hold = status_htcondor.pop('HOLD', '0')
+                total= status_htcondor.pop('TOTAL','0')
+                print(f"   - {self._name} is still running (Done: {done} / Run: {run} / Idle: {idle} / Hold: {hold} / Total: {total})!\nChecking the status of the jobs...")
+            else:
+                print(f"   - {self._name} is not running!\nChecking the status of the jobs...")
         # Check the status of the jobs
         for job_name in job_list:
             # Check the status of the job
             job_description = self._job_list[job_name]
+            job_print_status = ''
             if job_description[1]:
-# DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                if job_name == "seed1-0":
-                    print(f"\n{job_name=}")
-                    print(f"{job_description[0]=}")
-                    print(f"{'outputfiles' in job_description[0]=}")
-                    print(f"{not job_description[2]=}")
-                    print(f"{job_description[0]['outputfiles']=}")
-# DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 if 'outputfiles' in job_description[0]:
                     if not job_description[2]:
                         all_outputfiles_present = True
                         for ff in job_description[0]['outputfiles'].values():
-# DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                            if job_name == "seed1-0":
-                                print(f"{self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff=}")
-                                print(f"{(self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
-                                print(f"{not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}\n")
-# DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                             if self.step > 0:
                                 for ss in range(self.step):
                                     # TODO: Add output directory check
@@ -586,7 +575,7 @@ class JobManager:
                                     all_outputfiles_present = False
                         self._job_list[job_name][2] = all_outputfiles_present
                     job_status = 'not ' if not self._job_list[job_name][2] else ''
-                    print(f"   - Job {job_name} is {job_status}completed!")
+                    job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
                 else:
                     all_outputfiles_present = True
                     if self.step > 0:
@@ -608,9 +597,11 @@ class JobManager:
                             raise ValueError(f"Multiple output files found for job {job_name}:\n{list_ff}")
                     self._job_list[job_name][2] = all_outputfiles_present
                     job_status = 'not ' if not self._job_list[job_name][2] else ''
-                    print(f"   - Job {job_name} is {job_status}completed!")
+                    job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
             else:
-                print(f"   - Job {job_name} is not submitted!")
+                job_print_status += f"   - Job {job_name} is not submitted!\n"
+        if verbose:
+            print(job_print_status)
         self.save_job_list()
         
     def _status_boinc(self, **kwargs):
