@@ -521,11 +521,11 @@ class JobManager:
     def _submit_boinc(self, **kwargs):
         raise NotImplementedError("BOINC submission not implemented yet!")
     
-    def status(self, platform='htcondor', job_list=None, **kwargs):
+    def status(self, platform='htcondor', **kwargs):
         if platform == 'htcondor':
-            self._status_htcondor(job_list, **kwargs)
+            self._status_htcondor(**kwargs)
         elif platform == 'boinc':
-            self._status_boinc(job_list, **kwargs)
+            self._status_boinc(**kwargs)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
