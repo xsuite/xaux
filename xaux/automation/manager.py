@@ -558,6 +558,14 @@ class JobManager:
             # Check the status of the job
             job_description = self._job_list[job_name]
             if job_description[1]:
+# DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                if job_name == "seed1-0":
+                    print(f"{job_name=}")
+                    print(f"{job_description[0]=}")
+                    print(f"{'outputfiles' in job_description[0]=}")
+                    print(f"{(self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
+                    print(f"{not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
+# DEBUG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 if 'outputfiles' in job_description[0]:
                     if not job_description[2]:
                         all_outputfiles_present = True
@@ -568,10 +576,6 @@ class JobManager:
                                     if not (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff).exists():
                                         all_outputfiles_present = False
                             else:
-                                if job_name == "seed1-0":
-                                    print(f"{job_name=}")
-                                    print(f"{(self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
-                                    print(f"{not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
                                 if not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists():
                                     all_outputfiles_present = False
                         self._job_list[job_name][2] = all_outputfiles_present
