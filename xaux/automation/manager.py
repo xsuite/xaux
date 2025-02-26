@@ -568,6 +568,10 @@ class JobManager:
                                     if not (self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}') / ff).exists():
                                         all_outputfiles_present = False
                             else:
+                                if job_name == "seed1-0":
+                                    print(f"{job_name=}")
+                                    print(f"{(self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
+                                    print(f"{not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists()=}")
                                 if not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists():
                                     all_outputfiles_present = False
                         self._job_list[job_name][2] = all_outputfiles_present
