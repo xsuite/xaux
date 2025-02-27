@@ -551,22 +551,28 @@ class JobManager:
         still_running = (self._name in similation_status)
         if verbose:
             print(f"Checking status of {self._name}...")
-            if still_running:
-                similation_status_lines = similation_status.split('\n')[3:-6]
-                similation_status_lines = [line.split() for line in similation_status_lines]
-                header = similation_status_lines[0]
-                similation_status_lines = [line for line in similation_status_lines[1:] if self._name in line][0]
-                status_htcondor = {hh:ss for hh,ss in zip(header,similation_status_lines)}
-                for kk,vv in status_htcondor.items():
-                    status_htcondor[kk] = '0' if (vv == "_") else vv
-                done = status_htcondor.pop('DONE', '0')
-                run  = status_htcondor.pop('RUN',  '0')
-                idle = status_htcondor.pop('IDLE', '0')
-                hold = status_htcondor.pop('HOLD', '0')
-                total= status_htcondor.pop('TOTAL','0')
+        if still_running:
+            similation_status_lines = similation_status.split('\n')[3:-6]
+            similation_status_lines = [line.split() for line in similation_status_lines]
+            header = similation_status_lines[0]
+            similation_status_lines = [line for line in similation_status_lines[1:] if self._name in line][0]
+            status_htcondor = {hh:ss for hh,ss in zip(header,similation_status_lines)}
+            for kk,vv in status_htcondor.items():
+                status_htcondor[kk] = '0' if (vv == "_") else vv
+            done = status_htcondor.pop('DONE', '0')
+            run  = status_htcondor.pop('RUN',  '0')
+            idle = status_htcondor.pop('IDLE', '0')
+            hold = status_htcondor.pop('HOLD', '0')
+            total= status_htcondor.pop('TOTAL','0')
+            if verbose:
                 print(f"   - {self._name} is still running (Done: {done} / Run: {run} / Idle: {idle} / Hold: {hold} / Total: {total})!\nChecking the status of the jobs...")
-            else:
-                print(f"   - {self._name} is not running!\nChecking the status of the jobs...")
+            if hold != 0:
+                job_id = status_htcondor.pop('JOB_IDS').split('.')[0]
+                subprocess.run(['condor_release',job_id])
+                if verbose:
+                    print("   - Hold jobs have been released!")
+        elif verbose:
+            print(f"   - {self._name} is not running!\nChecking the status of the jobs...")
         # Check the status of the jobs
         for job_name in job_list:
             # Check the status of the job
