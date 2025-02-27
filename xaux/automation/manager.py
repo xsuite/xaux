@@ -186,10 +186,12 @@ class JobManager:
 
     def to_dict(self):
         return {'name': self._name, 'work_directory': str(self.work_directory),
-                'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 
+                'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 'main_python_env': self._main_python_env,
                 'job_class_name': str(self._job_class_name), 'job_class_script': str(self._job_class_script), 'step': self._step}
 
     def from_dict(self, metadata):
+        if 'main_python_env' not in metadata:
+            self._main_python_env = "/cvmfs/sft.cern.ch/lcg/views/LCG_106/x86_64-el9-gcc13-opt/setup.sh"
         for kk, vv in metadata.items():
             setattr(self, "_"+kk, vv)
         # Import the job class
