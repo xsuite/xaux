@@ -309,7 +309,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _submit_htcondor(self, auto: bool=False, **kwargs):
+    def _submit_htcondor(self, auto: bool=False, job_list:list|None=None, **kwargs):
         # Check kwargs
         if 'step' in kwargs:
             self.step = kwargs.pop('step')
@@ -318,11 +318,24 @@ class JobManager:
         import xfields as xf
         if 'xcoll' in sys.modules:
             import xcoll as xc # type: ignore
-        job_list = self._job_list.keys()
+        if job_list is None:
+            if len(self._job_list) == 0:
+                self.read_job_list()
+            if len(self._job_list) == 0:
+                print("No jobs to submit!")
+                return
+            job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
-        # Check if the job is already submitted
-        job_list = [job_name for job_name in job_list if not self._job_list[job_name][1]]
+        # Check if still running
+        import subprocess
+        similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+        still_running = (self._name in similation_status)
+        # Check if the job is already submitted or if their results are already returned if not running on htcondor
+        if still_running:
+            job_list = [job_name for job_name in job_list if not self._job_list[job_name][1]]
+        else:
+            job_list = [job_name for job_name in job_list if not self._job_list[job_name][2]]
         if len(job_list) == 0:
             print("All jobs are already submitted!")
             return
@@ -574,10 +587,11 @@ class JobManager:
         elif verbose:
             print(f"   - {self._name} is not running!\nChecking the status of the jobs...")
         # Check the status of the jobs
+        njob_finished = 0
         for job_name in job_list:
             # Check the status of the job
             job_description = self._job_list[job_name]
-            job_print_status = ''
+            # job_print_status = ''
             if job_description[1]:
                 if 'outputfiles' in job_description[0]:
                     if not job_description[2]:
@@ -592,8 +606,9 @@ class JobManager:
                                 if not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists():
                                     all_outputfiles_present = False
                         self._job_list[job_name][2] = all_outputfiles_present
-                    job_status = 'not ' if not self._job_list[job_name][2] else ''
-                    job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
+                        njob_finished += all_outputfiles_present
+                    # job_status = 'not ' if not self._job_list[job_name][2] else ''
+                    # job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
                 else:
                     all_outputfiles_present = True
                     if self.step > 0:
@@ -614,12 +629,14 @@ class JobManager:
                         elif len(list_ff) > 1:
                             raise ValueError(f"Multiple output files found for job {job_name}:\n{list_ff}")
                     self._job_list[job_name][2] = all_outputfiles_present
-                    job_status = 'not ' if not self._job_list[job_name][2] else ''
-                    job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
-            else:
-                job_print_status += f"   - Job {job_name} is not submitted!\n"
+                    njob_finished += all_outputfiles_present
+            #         job_status = 'not ' if not self._job_list[job_name][2] else ''
+            #         job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
+            # else:
+            #     job_print_status += f"   - Job {job_name} is not submitted!\n"
         if verbose:
-            print(job_print_status)
+            # print(job_print_status)
+            print(f"   - {njob_finished} jobs are finished out of {len(job_list)}!")
         self.save_job_list()
         
     def _status_boinc(self, **kwargs):
