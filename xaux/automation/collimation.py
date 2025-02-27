@@ -17,6 +17,25 @@ else:
 
 
 class LossMapPencilJob(JobTemplate):
+    """Job to generate a loss map with a pencil beam.
+
+    Parameters
+    ----------
+    line: Line | Path | str
+        The Xsuite line to be tracked.
+    colldb : CollimatorDatabase | Path | str
+        Database with all collimators to be installed and their settings. If a
+        path it should be in .yaml format.
+    lmtype: {'B1H', 'B1V', 'B2H', 'B2V'}
+        Loss map type, to specify the beam and plane for particle generation.
+    num_particles: int
+        Number of particles to generate.
+    lossmap_file: Path | str | bool, optional
+        Path to file to store the generated loss map result.
+    summary_file: Path | str | bool, optional
+        Path to file to store a summary of losses on collimators.
+    """
+
     def validate_kwargs(self, **kwargs):
         if "colldb" not in kwargs:
             raise ValueError("No collimation database provided!")
@@ -56,12 +75,13 @@ class LossMapPencilJob(JobTemplate):
 
     def generate_output(self, **kwargs):
         lossmap_file = kwargs.get("lossmap_file", None)
-        if lossmap_file is None:
+        if lossmap_file is None or lossmap_file is True:
             lossmap_file = Path(f'lossmap_B{self.beam}{self.plane}.json')
-        self.ThisLM.to_json(file=lossmap_file)
+        if lossmap_file is not False:
+            self.ThisLM.to_json(file=lossmap_file)
         summary_file = kwargs.get("summary_file", None)
-        if summary_file is None:
+        if summary_file is None or summary_file is True:
             summary_file = Path(f'coll_summary_B{self.beam}{self.plane}.out')
-        # Save a summary of the collimator losses to a text file
-        self.ThisLM.save_summary(file=summary_file)
+        if summary_file is not False:
+            self.ThisLM.save_summary(file=summary_file)
         print(self.ThisLM.summary)

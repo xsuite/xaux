@@ -27,29 +27,30 @@ def import_class(module_path, class_name): # TODO: To be tested
 
 
 class JobManager:
-    job_class = JobTemplate
-    def __init__(self, *arg, **kwargs):
-        """
-        This Class manages a list of jobs for tacking to be executed in parallel and their submission to HTCONDOR and BOINC.
-        It can be loaded from its metadata file or created from scratch using the following parameters.
+    """
+    Manages a list of jobs for parallel tracking and their submission to HTCONDOR and BOINC.
 
-        Parameters
-        ----------
-        name : str
-            Name of the job manager.
-        work_directory : str or Path
-            Directory where the job manager will store files necessary for the management.
-        input_directory : str or Path
-            Directory where the input files are stored.
-        output_directory : str or Path
-            Directory where the output files will be stored.
-        job_class (optional) : class
-            Class use to run the simulations. Default is JobTemplate.
-        job_class_name (optional) : str
-            Name of the class used to run the simulations.
-        job_class_script (optional) : str or Path
-            Path to the script where the class for the tracking is defined (if different from the current script).
-        """
+    Can be loaded from its metadata file or created from scratch.
+
+    Parameters
+    ----------
+    name : str
+        Name of the job manager.
+    work_directory : Path | str
+        Directory where the job manager will store files necessary for the management.
+    input_directory : Path | str
+        Directory where the input files are stored.
+    output_directory : Path | str
+        Directory where the output files will be stored.
+    job_class : class, optional
+        Class use to run the simulations. Default is JobTemplate.
+    job_class_name : str, optional
+        Name of the class used to run the simulations.
+    job_class_script : Path | str, optional
+        Path to the script where the class for the tracking is defined (if different from the current script).
+    """
+
+    def __init__(self, *arg, **kwargs):
         if len(arg) == 1:
             # Load the job manager from its metadata file
             self.read_metadata(arg[0])
@@ -87,7 +88,7 @@ class JobManager:
         self._output_directory = self._output_directory.resolve()
         # Set the job class for the tracking
         if "job_class" in kwargs:
-            self._job_class = kwargs.pop("job_class", None)
+            self._job_class = kwargs.pop("job_class", JobTemplate)
             if self._job_class is None:
                 self._job_class_name = None
                 self._job_class_script = ""
@@ -650,10 +651,10 @@ class JobManager:
             # print(job_print_status)
             print(f"   - {njob_finished} jobs are finished out of {len(job_list)}!")
         self.save_job_list()
-        
+
     def _status_boinc(self, **kwargs):
         raise NotImplementedError("BOINC status not implemented yet!")
-    
+
     def retrieve(self, platform='htcondor', job_list=None, **kwarg):
         if platform == 'htcondor':
             return self._retrieve_htcondor(job_list, **kwarg)
@@ -661,7 +662,7 @@ class JobManager:
             return self._retrieve_boinc(job_list, **kwarg)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
-        
+
     def _retrieve_htcondor(self, job_list=None, **kwarg):
         self.read_job_list()
         if job_list is None:
