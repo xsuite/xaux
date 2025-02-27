@@ -627,7 +627,7 @@ class JobManager:
             print(f"WARNING: {self._name} is still running! Wait for the end of the simulation before retrieving the results!")
         # Retrieve the results of the jobs
         if 'outputfiles' in self._job_list[list(self._job_list.keys())[0]][0]:
-            results = {kk:self._job_list[kk][0]['outputfiles'].copy() for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
+            results = {kk:self._job_list[kk][0]['outputfiles'].copy() for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2] and ~self._job_list[kk][3]}
             for job_name in results:
                 for kk,ff in results[job_name].items():
                     if self.step > 0:
@@ -653,6 +653,16 @@ class JobManager:
         if len(missing_results) != 0:
             print(f"Missing results for the following jobs: {missing_results}")
         return results
+
+    def set_jobs_ready_to_be_removed(self, job_list:list|None=None, **kwarg):
+        self.read_job_list()
+        if job_list is None:
+            job_list = self._job_list.keys()
+        # Check if the job list is valid
+        job_list = [job_name for job_name in job_list if job_name in self._job_list]
+        # Set jobs ready to be removed
+        for job_name in job_list:
+            self._job_list[job_name][3] = True
     
     def _retrieve_boinc(self, job_list=None, **kwarg):
         raise NotImplementedError("BOINC retrieval not implemented yet!")
@@ -665,34 +675,56 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _clean_htcondor(self, job_list=None, **kwarg):
+    def _clean_htcondor(self, job_list:list|None=None, force:bool=False, remove_outputs:bool=True, **kwarg):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
         # Remove unfinished jobs from the list
-        job_list = [job_name for job_name in job_list if self._job_list[job_name][2]]
+        if not force:
+            list_job_not_removed = [job_name for job_name in job_list if not self._job_list[job_name][3]]
+            print(f"Warning: The following jobs will not be removed as they have not been set so: {list_job_not_removed}")
+            job_list = [job_name for job_name in job_list if self._job_list[job_name][3]]
         # Remove jobs from main list and remove files
+        import shutil
         for job_name in job_list:
-            if self._job_list[job_name][3]:
-                job_dirs = list(self.output_directory.glob(self._name+f'.htcondor.{job_name}.*'))
-                # The user should remove the output files
-                if not any([len(list(jds.glob('*')))>0 for jds in job_dirs]):
-                    for jds in job_dirs:
-                        jds.rmdir()
-                    self._job_list.pop(job_name)
-                else:
-                    print(f"Job {job_name} still has output files saved. Please remove them for the cleaning to be performed! Check:\n"+ \
-                          f"{self.output_directory / (self._name+f'.htcondor.{job_name}.*')}")
+            input_files = list(self.job_specific_input_directory.glob(self._name+f'.{job_name}.*'))
+            if remove_outputs:
+                output_dirs = list(self.output_directory.glob(self._name+f'.htcondor.{job_name}.*'))
+                to_be_removed = [*output_dirs,*input_files]
             else:
-                print(f"Job {job_name} output files have not been retrived, so it cannot be cleaned!")
+                to_be_removed = input_files
+            # Remove the files and directories
+            for tbr in to_be_removed:
+                if tbr.is_dir():
+                    shutil.rmtree(tbr)
+                else:
+                    tbr.unlink()
+            # Remove the job from the job list
+            self._job_list.pop(job_name)
         if len(self._job_list) == 0:
             print("All jobs are already cleaned!")
         self.save_job_list()
 
     def _clean_boinc(self,  job_list=None, **kwarg):
         raise NotImplementedError("BOINC cleaning not implemented yet!")
+    
+    # TODO: Add auto delet of the jobmanager directory if empty when exiting the class
+    # def __del__(self):
+    #     self.read_job_list()
+    #     # Remove jobmanager directory if no jobs are present
+    #     if len(self._job_list) == 0:
+    #         import shutil
+    #         if self.metafile.exists():
+    #             self.metafile.unlink()
+    #         if self.job_specific_input_directory.exists():
+    #             shutil.rmtree(self.job_specific_input_directory)
+    #         if self.job_management_file.exists():
+    #             self.job_management_file.unlink()
+    #         if self.work_directory.exists():
+    #             shutil.rmtree(self.work_directory)
+    #         print(f"Job manager {self._name} has been deleted!")
 
 
 
