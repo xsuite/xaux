@@ -627,7 +627,7 @@ class JobManager:
             print(f"WARNING: {self._name} is still running! Wait for the end of the simulation before retrieving the results!")
         # Retrieve the results of the jobs
         if 'outputfiles' in self._job_list[list(self._job_list.keys())[0]][0]:
-            results = {kk:self._job_list[kk][0]['outputfiles'] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
+            results = {kk:self._job_list[kk][0]['outputfiles'].copy() for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
             for job_name in results:
                 for kk,ff in results[job_name].items():
                     if self.step > 0:
