@@ -566,7 +566,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
         
-    def _status_htcondor(self, verbose=True, **kwargs):
+    def _status_htcondor(self, verbose=True, release_hold_jobs:bool=True, **kwargs):
         self.read_job_list()
         job_list = self._job_list.keys()
         # Check if the job list is valid
@@ -591,7 +591,7 @@ class JobManager:
             total= status_htcondor.pop('TOTAL','0')
             if verbose:
                 print(f"   - {self._name} is still running (Done: {done} / Run: {run} / Idle: {idle} / Hold: {hold} / Total: {total})!\nChecking the status of the jobs...")
-            if hold != 0:
+            if hold != 0 and release_hold_jobs:
                 job_id = status_htcondor.pop('JOB_IDS').split('.')[0]
                 subprocess.run(['condor_release',job_id])
                 if verbose:
