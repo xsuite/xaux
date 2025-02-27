@@ -447,6 +447,11 @@ class JobManager:
                         job_output_directory.mkdir(parents=True)
                     else:
                         list_inside_job_output_directory = list(job_output_directory.glob('*'))
+                        list_log = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.{ss}.log'))
+                        list_err = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.{ss}.err'))
+                        list_out = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.{ss}.out'))
+                        list_exception = [*list_log,*list_err,*list_out]
+                        list_inside_job_output_directory = [ff for ff in list_inside_job_output_directory if ff not in list_exception]
                         if len(list_inside_job_output_directory) != 0:
                             raise FileExistsError(f"Output directory {job_output_directory} is not empty!")
                         #     for ff in list_inside_job_output_directory:
@@ -460,6 +465,11 @@ class JobManager:
                     job_output_directory.mkdir(parents=True)
                 else:
                     list_inside_job_output_directory = list(job_output_directory.glob('*'))
+                    list_log = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.0.log'))
+                    list_err = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.0.err'))
+                    list_out = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.0.out'))
+                    list_exception = [*list_log,*list_err,*list_out]
+                    list_inside_job_output_directory = [ff for ff in list_inside_job_output_directory if ff not in list_exception]
                     if len(list_inside_job_output_directory) != 0:
                         raise FileExistsError(f"Output directory {job_output_directory} is not empty!")
                     #     for ff in list_inside_job_output_directory:
