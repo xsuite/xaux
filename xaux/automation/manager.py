@@ -13,6 +13,19 @@ from pathlib import Path
 from .template import JobTemplate
 
 
+def import_class(module_path, class_name): # TODO: To be tested
+    module_path = Path(module_path)
+    module_name = module_path.stem
+
+    import importlib
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+
+    return getattr(module, class_name)
+
+
 class JobManager:
     job_class = JobTemplate
     def __init__(self, *arg, **kwargs):
@@ -86,8 +99,7 @@ class JobManager:
                 self._job_class_name   = kwargs.pop("job_class_name")
                 self._job_class_script = kwargs.pop("job_class_script")
                 # # Import the job class TODO: Does not work
-                # from importlib import import_module
-                # self._job_class = import_module(self._job_class_name, package=self._job_class_script)
+                # self._job_class = import_class(self._job_class_script,self._job_class_name)
             else:
                 raise ValueError("Either specify the class for the tracking using job_class or both job_class_name and job_class_script!")
         self._step = kwargs.get("step", 1)
