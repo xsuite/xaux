@@ -678,7 +678,7 @@ class JobManager:
             if self._job_list[job_name][3]:
                 job_dirs = list(self.output_directory.glob(self._name+f'.htcondor.{job_name}.*'))
                 # The user should remove the output files
-                if not any([len(jds.glob('*'))>0 for jds in job_dirs]):
+                if not any([len(list(jds.glob('*')))>0 for jds in job_dirs]):
                     for jds in job_dirs:
                         jds.rmdir()
                     self._job_list.pop(job_name)
