@@ -13,6 +13,19 @@ from pathlib import Path
 from .template import JobTemplate
 
 
+def import_class(module_path, class_name): # TODO: To be tested
+    module_path = Path(module_path)
+    module_name = module_path.stem
+
+    import importlib
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+
+    return getattr(module, class_name)
+
+
 class JobManager:
     """
     Manages a list of jobs for parallel tracking and their submission to HTCONDOR and BOINC.
@@ -87,8 +100,7 @@ class JobManager:
                 self._job_class_name   = kwargs.pop("job_class_name")
                 self._job_class_script = kwargs.pop("job_class_script")
                 # # Import the job class TODO: Does not work
-                # from importlib import import_module
-                # self._job_class = import_module(self._job_class_name, package=self._job_class_script)
+                # self._job_class = import_class(self._job_class_script,self._job_class_name)
             else:
                 raise ValueError("Either specify the class for the tracking using job_class or both job_class_name and job_class_script!")
         self._step = kwargs.get("step", 1)
@@ -175,10 +187,12 @@ class JobManager:
 
     def to_dict(self):
         return {'name': self._name, 'work_directory': str(self.work_directory),
-                'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 
+                'input_directory': str(self.input_directory), 'output_directory': str(self.output_directory), 'main_python_env': self._main_python_env,
                 'job_class_name': str(self._job_class_name), 'job_class_script': str(self._job_class_script), 'step': self._step}
 
     def from_dict(self, metadata):
+        if 'main_python_env' not in metadata:
+            self._main_python_env = "/cvmfs/sft.cern.ch/lcg/views/LCG_106/x86_64-el9-gcc13-opt/setup.sh"
         for kk, vv in metadata.items():
             setattr(self, "_"+kk, vv)
         # Import the job class
@@ -298,7 +312,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _submit_htcondor(self, auto: bool=False, **kwargs):
+    def _submit_htcondor(self, auto: bool=False, job_list:list|None=None, **kwargs):
         # Check kwargs
         if 'step' in kwargs:
             self.step = kwargs.pop('step')
@@ -307,11 +321,24 @@ class JobManager:
         import xfields as xf
         if 'xcoll' in sys.modules:
             import xcoll as xc # type: ignore
-        job_list = self._job_list.keys()
+        if job_list is None:
+            if len(self._job_list) == 0:
+                self.read_job_list()
+            if len(self._job_list) == 0:
+                print("No jobs to submit!")
+                return
+            job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
-        # Check if the job is already submitted
-        job_list = [job_name for job_name in job_list if not self._job_list[job_name][1]]
+        # Check if still running
+        import subprocess
+        similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+        still_running = (self._name in similation_status)
+        # Check if the job is already submitted or if their results are already returned if not running on htcondor
+        if still_running:
+            job_list = [job_name for job_name in job_list if not self._job_list[job_name][1]]
+        else:
+            job_list = [job_name for job_name in job_list if not self._job_list[job_name][2]]
         if len(job_list) == 0:
             print("All jobs are already submitted!")
             return
@@ -345,8 +372,9 @@ class JobManager:
             fid.write(f"#!/bin/bash\n\n")
             # Add arguments to the job
             fid.write("job_name=${1};\n")
+            fid.write("Step=${2};\n")
             for ii,kk in enumerate({**lmulti_inputfiles,**lmulti_parameters,**lmulti_outputfiles}):
-                fid.write(kk+"=${"+str(ii+2)+"};\n")
+                fid.write(kk+"=${"+str(ii+3)+"};\n")
             fid.write(f"\nset --;\n\n")
             fid.write(f"sleep 60;\n\n")
             # Load python environment
@@ -365,7 +393,7 @@ class JobManager:
             import xfields as xf
             for xclass in [xo, xd, xt, xp, xf]:
                 fid.write(f"cp -r {str(Path(xclass.__file__).parent)} .;\n")  # Copy of main xobjects
-            fid.write(f"cp -r {str(Path(sys.modules[JobTemplate.__module__].__file__).parent)} .;\n") # Copy of xaux
+            fid.write(f"cp -r {str(Path(sys.modules[JobTemplate.__module__].__file__).parent.parent)} .;\n") # Copy of xaux
             if 'xcoll' in sys.modules:
                 fid.write(f"cp -r {str(Path(xc.__file__).parent)} .;\n")      # Copy of xcoll if exists
             # Copy input files locally
@@ -390,20 +418,41 @@ class JobManager:
             # Execute python script
             fid.write(f"\npython -c \"from {self._job_class_script.stem} import {self._job_class_name}; {self._job_class_name}.run({job_args})\";\n")
             # last steps
-            fid.write('echo;\n')
+            fid.write('\necho;\n')
             fid.write('echo $( date )"    End job ${job_name}.";\n')
             fid.write('echo "ls:";\n')
             fid.write('ls;\n')
+            # Copy the outputs into the output directory
+            if len(lmulti_outputfiles) != 0 or len(lunique_outputfiles) != 0:
+                # TODO: check if possible to do this automatically with htcondor
+                out_args  = ["${"+kk+"}" for kk in lmulti_outputfiles]
+                out_args += [str(vv) for vv in lunique_outputfiles.values()]
+                out_args  = " ".join(out_args)
+                if self.step > 0:
+                    job_output_directory = self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')
+                else:
+                    job_output_directory = self.output_directory / (self._name+'.htcondor.${job_name}.0')
+                fid.write(f"\ncp {out_args} {job_output_directory}/;\n")
+                #     fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.${Step}')}/;\n")
+                # else:
+                #     fid.write(f"\ncp {out_args} {self.output_directory / (self._name+'.htcondor.${job_name}.0')}/;\n")
+                fid.write('\necho "ls output_dir:";\n')
+                fid.write(f'ls {job_output_directory};\n')
             fid.write('exit 0;\n')
         # Create output job directory and clean it if not empty
         for job_name in job_list:
-            if self.step >0 :
+            if self.step > 0 :
                 for ss in range(self.step):
                     job_output_directory = self.output_directory / (self._name+f'.htcondor.{job_name}.{ss}')
                     if not job_output_directory.exists():
                         job_output_directory.mkdir(parents=True)
                     else:
                         list_inside_job_output_directory = list(job_output_directory.glob('*'))
+                        list_log = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.{ss}.log'))
+                        list_err = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.{ss}.err'))
+                        list_out = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.{ss}.out'))
+                        list_exception = [*list_log,*list_err,*list_out]
+                        list_inside_job_output_directory = [ff for ff in list_inside_job_output_directory if ff not in list_exception]
                         if len(list_inside_job_output_directory) != 0:
                             raise FileExistsError(f"Output directory {job_output_directory} is not empty!")
                         #     for ff in list_inside_job_output_directory:
@@ -417,6 +466,11 @@ class JobManager:
                     job_output_directory.mkdir(parents=True)
                 else:
                     list_inside_job_output_directory = list(job_output_directory.glob('*'))
+                    list_log = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.0.log'))
+                    list_err = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.0.err'))
+                    list_out = list(job_output_directory.glob(self._name+f'.htcondor.*.*.{job_name}.0.out'))
+                    list_exception = [*list_log,*list_err,*list_out]
+                    list_inside_job_output_directory = [ff for ff in list_inside_job_output_directory if ff not in list_exception]
                     if len(list_inside_job_output_directory) != 0:
                         raise FileExistsError(f"Output directory {job_output_directory} is not empty!")
                     #     for ff in list_inside_job_output_directory:
@@ -440,6 +494,7 @@ class JobManager:
             fid.write(f"requirements       = {kwargs.pop('requirements','Machine =!= LastRemoteHost')}\n")
             fid.write(f"max_retries        = {kwargs.pop('max_retries',3)}\n")
             fid.write(f"max_materialize    = {kwargs.pop('max_materialize',100)}\n")
+            fid.write(f"notification       = {kwargs.pop('notification','error')}\n")
             # Allowed JobFlavors: espresso, microcentury, longlunch, workday, tomorrow, testmatch, nextweek
             fid.write(f"MY.JobFlavour      = \"{kwargs.pop('JobFlavor','tomorrow')}\"\n")
             fid.write(f"MY.AccountingGroup = \"{kwargs.pop('accounting_group','group_u_BE.ABP.normal')}\"\n")
@@ -457,13 +512,14 @@ class JobManager:
             # Set output files transfer
             loutputs = ''
             if 'outputfiles' in self._job_list[jn0][0]:
-                loutputs += ', '.join([vv for vv in lunique_outputfiles.values()])
-                if len(lmulti_outputfiles) != 0:
-                    loutputs += '$('+'),$('.join([kk for kk in lmulti_outputfiles])+')'
-                fid.write(f"transfer_output_files   = {loutputs}\n")
+                # TODO: fix file transfer to output directory
+                # loutputs += ', '.join([vv for vv in lunique_outputfiles.values()])
+                # if len(lmulti_outputfiles) != 0:
+                #     loutputs += '$('+'),$('.join([kk for kk in lmulti_outputfiles])+')'
+                # fid.write(f"transfer_output_files   = {loutputs}\n")
                 fid.write(f"when_to_transfer_output = ON_EXIT\n")
             # Create the list of arguments and the queue
-            section_arguments = "arguments = $(job_name)"
+            section_arguments = "arguments = $(job_name) $(Step)"
             section_queue_name = "job_name"
             section_queue_list = ""
             if len(lmulti_inputfiles) != 0:
@@ -502,16 +558,16 @@ class JobManager:
 
     def _submit_boinc(self, **kwargs):
         raise NotImplementedError("BOINC submission not implemented yet!")
-
-    def status(self, platform='htcondor', job_list=None, **kwargs):
+    
+    def status(self, platform='htcondor', **kwargs):
         if platform == 'htcondor':
-            self._status_htcondor(job_list, **kwargs)
+            self._status_htcondor(**kwargs)
         elif platform == 'boinc':
-            self._status_boinc(job_list, **kwargs)
+            self._status_boinc(**kwargs)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
-
-    def _status_htcondor(self, **kwargs):
+        
+    def _status_htcondor(self, verbose=True, release_hold_jobs:bool=True, **kwargs):
         self.read_job_list()
         job_list = self._job_list.keys()
         # Check if the job list is valid
@@ -519,7 +575,9 @@ class JobManager:
         # Check if submission still running
         similation_status = subprocess.run(['condor_q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
         still_running = (self._name in similation_status)
-        if not still_running:
+        if verbose:
+            print(f"Checking status of {self._name}...")
+        if still_running:
             similation_status_lines = similation_status.split('\n')[3:-6]
             similation_status_lines = [line.split() for line in similation_status_lines]
             header = similation_status_lines[0]
@@ -532,18 +590,26 @@ class JobManager:
             idle = status_htcondor.pop('IDLE', '0')
             hold = status_htcondor.pop('HOLD', '0')
             total= status_htcondor.pop('TOTAL','0')
-            print(f"{self._name} is still running (Done: {done} / Run: {run} / Idle: {idle} / Hold: {hold} / Total: {total})!")
-        else:
-            print(f"{self._name} is not running!")
+            if verbose:
+                print(f"   - {self._name} is still running (Done: {done} / Run: {run} / Idle: {idle} / Hold: {hold} / Total: {total})!\nChecking the status of the jobs...")
+            if hold != 0 and release_hold_jobs:
+                job_id = status_htcondor.pop('JOB_IDS').split('.')[0]
+                subprocess.run(['condor_release',job_id])
+                if verbose:
+                    print("   - Hold jobs have been released!")
+        elif verbose:
+            print(f"   - {self._name} is not running!\nChecking the status of the jobs...")
         # Check the status of the jobs
+        njob_finished = 0
         for job_name in job_list:
             # Check the status of the job
             job_description = self._job_list[job_name]
+            # job_print_status = ''
             if job_description[1]:
                 if 'outputfiles' in job_description[0]:
                     if not job_description[2]:
                         all_outputfiles_present = True
-                        for ff in job_description[0]['outputfiles']:
+                        for ff in job_description[0]['outputfiles'].values():
                             if self.step > 0:
                                 for ss in range(self.step):
                                     # TODO: Add output directory check
@@ -552,8 +618,10 @@ class JobManager:
                             else:
                                 if not (self.output_directory / (self._name+f'.htcondor.{job_name}.0') / ff).exists():
                                     all_outputfiles_present = False
-                        self._job_list[job_name] = all_outputfiles_present
-                    print(f"   - Job {job_name} is {'not ' if not self._job_list[job_name][2] else ''}completed!")
+                        self._job_list[job_name][2] = all_outputfiles_present
+                        njob_finished += all_outputfiles_present
+                    # job_status = 'not ' if not self._job_list[job_name][2] else ''
+                    # job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
                 else:
                     all_outputfiles_present = True
                     if self.step > 0:
@@ -573,10 +641,15 @@ class JobManager:
                             all_outputfiles_present = False
                         elif len(list_ff) > 1:
                             raise ValueError(f"Multiple output files found for job {job_name}:\n{list_ff}")
-                    self._job_list[job_name] = all_outputfiles_present
-                    print(f"   - Job {job_name} is {'not ' if not self._job_list[job_name][2] else ''}completed!")
-            else:
-                print(f"   - Job {job_name} is not submitted!")
+                    self._job_list[job_name][2] = all_outputfiles_present
+                    njob_finished += all_outputfiles_present
+            #         job_status = 'not ' if not self._job_list[job_name][2] else ''
+            #         job_print_status += f"   - Job {job_name} is {job_status}completed!\n"
+            # else:
+            #     job_print_status += f"   - Job {job_name} is not submitted!\n"
+        if verbose:
+            # print(job_print_status)
+            print(f"   - {njob_finished} jobs are finished out of {len(job_list)}!")
         self.save_job_list()
 
     def _status_boinc(self, **kwargs):
@@ -602,7 +675,7 @@ class JobManager:
             print(f"WARNING: {self._name} is still running! Wait for the end of the simulation before retrieving the results!")
         # Retrieve the results of the jobs
         if 'outputfiles' in self._job_list[list(self._job_list.keys())[0]][0]:
-            results = {kk:self._job_list[kk][0]['outputfiles'] for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2]}
+            results = {kk:self._job_list[kk][0]['outputfiles'].copy() for kk in job_list if self._job_list[kk][1] and self._job_list[kk][2] and ~self._job_list[kk][3]}
             for job_name in results:
                 for kk,ff in results[job_name].items():
                     if self.step > 0:
@@ -629,6 +702,16 @@ class JobManager:
             print(f"Missing results for the following jobs: {missing_results}")
         return results
 
+    def set_jobs_ready_to_be_removed(self, job_list:list|None=None, **kwarg):
+        self.read_job_list()
+        if job_list is None:
+            job_list = self._job_list.keys()
+        # Check if the job list is valid
+        job_list = [job_name for job_name in job_list if job_name in self._job_list]
+        # Set jobs ready to be removed
+        for job_name in job_list:
+            self._job_list[job_name][3] = True
+    
     def _retrieve_boinc(self, job_list=None, **kwarg):
         raise NotImplementedError("BOINC retrieval not implemented yet!")
 
@@ -640,34 +723,56 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _clean_htcondor(self, job_list=None, **kwarg):
+    def _clean_htcondor(self, job_list:list|None=None, force:bool=False, remove_outputs:bool=True, **kwarg):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
         # Check if the job list is valid
         assert any([job_name in self._job_list for job_name in job_list]), "Invalid job name!"
         # Remove unfinished jobs from the list
-        job_list = [job_name for job_name in job_list if self._job_list[job_name][2]]
+        if not force:
+            list_job_not_removed = [job_name for job_name in job_list if not self._job_list[job_name][3]]
+            print(f"Warning: The following jobs will not be removed as they have not been set so: {list_job_not_removed}")
+            job_list = [job_name for job_name in job_list if self._job_list[job_name][3]]
         # Remove jobs from main list and remove files
+        import shutil
         for job_name in job_list:
-            if self._job_list[job_name][3]:
-                job_dirs = list(self.output_directory.glob(self._name+f'.htcondor.{job_name}.*'))
-                # The user should remove the output files
-                if not any([len(jds.glob('*'))>0 for jds in job_dirs]):
-                    for jds in job_dirs:
-                        jds.rmdir()
-                    self._job_list.pop(job_name)
-                else:
-                    print(f"Job {job_name} still has output files saved. Please remove them for the cleaning to be performed! Check:\n"+ \
-                          f"{self.output_directory / (self._name+f'.htcondor.{job_name}.*')}")
+            input_files = list(self.job_specific_input_directory.glob(self._name+f'.{job_name}.*'))
+            if remove_outputs:
+                output_dirs = list(self.output_directory.glob(self._name+f'.htcondor.{job_name}.*'))
+                to_be_removed = [*output_dirs,*input_files]
             else:
-                print(f"Job {job_name} output files have not been retrived, so it cannot be cleaned!")
+                to_be_removed = input_files
+            # Remove the files and directories
+            for tbr in to_be_removed:
+                if tbr.is_dir():
+                    shutil.rmtree(tbr)
+                else:
+                    tbr.unlink()
+            # Remove the job from the job list
+            self._job_list.pop(job_name)
         if len(self._job_list) == 0:
             print("All jobs are already cleaned!")
         self.save_job_list()
 
     def _clean_boinc(self,  job_list=None, **kwarg):
         raise NotImplementedError("BOINC cleaning not implemented yet!")
+    
+    # TODO: Add auto delet of the jobmanager directory if empty when exiting the class
+    # def __del__(self):
+    #     self.read_job_list()
+    #     # Remove jobmanager directory if no jobs are present
+    #     if len(self._job_list) == 0:
+    #         import shutil
+    #         if self.metafile.exists():
+    #             self.metafile.unlink()
+    #         if self.job_specific_input_directory.exists():
+    #             shutil.rmtree(self.job_specific_input_directory)
+    #         if self.job_management_file.exists():
+    #             self.job_management_file.unlink()
+    #         if self.work_directory.exists():
+    #             shutil.rmtree(self.work_directory)
+    #         print(f"Job manager {self._name} has been deleted!")
 
 
 
