@@ -76,7 +76,7 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
         # Check the class doesn't already have a delete method
         if cls.__dict__.get('delete') is not None:
             raise TypeError(f"Class {cls.__name__} provides a 'delete' method. This is not "
-                            + "compatible with the singleton decorator!")
+                           + "compatible with the singleton decorator!")
 
         # Define wrapper names
         wrap_new = cls.__new__ if cls.__dict__.get('__new__') is not None \
@@ -112,12 +112,13 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
                 for kk in list(kwargs.keys()) + list(args):
                     if not allow_underscore_vars_in_init and kk.startswith('_'):
                         raise AttributeError(f"Cannot set private attribute {kk} for {this_cls.__name__}! "
-                                        + "Use the appropriate setter method instead. However, if you "
-                                        + "really want to be able to set this attribute in the "
-                                        + "constructor, use 'allow_underscore_vars_in_init=True' "
-                                        + "in the singleton decorator.")
+                                            + "Use the appropriate setter method instead. However, if you "
+                                            + "constructor, use 'allow_underscore_vars_in_init=True' "
+                                            + "in the singleton decorator.")
                 # Initialise the singleton if it has not been initialised yet
                 if not self._initialised:
+                    # self._initialised = True
+                    # Call the init of the original class - hence only once (the first initialisation)
                     super().__init__(*args, **kwargs)
                     self._initialised = True
                 # Set the attributes; only attributes defined in the class, custom init, or properties
