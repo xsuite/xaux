@@ -142,7 +142,7 @@ class JobManager:
         return Path(self._work_directory)
 
     @work_directory.setter
-    def work_directory(self, path: Path|str):
+    def work_directory(self, path):
         path = Path(path)
         if not path.exists():
             path.mkdir(parents=True)
@@ -153,7 +153,7 @@ class JobManager:
         return Path(self._input_directory)
 
     @input_directory.setter
-    def input_directory(self, path: Path|str|None):
+    def input_directory(self, path):
         if path is None:
             self._input_directory = None
         else:
@@ -167,7 +167,7 @@ class JobManager:
         return Path(self._output_directory)
 
     @output_directory.setter
-    def output_directory(self, path: Path|str):
+    def output_directory(self, path):
         path = Path(path)
         if not Path(path).exists():
             Path(path).mkdir(parents=True)
@@ -312,7 +312,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _submit_htcondor(self, auto: bool=False, job_list:list|None=None, **kwargs):
+    def _submit_htcondor(self, auto: bool=False, job_list=None, **kwargs):
         # Check kwargs
         if 'step' in kwargs:
             self.step = kwargs.pop('step')
@@ -558,7 +558,7 @@ class JobManager:
 
     def _submit_boinc(self, **kwargs):
         raise NotImplementedError("BOINC submission not implemented yet!")
-    
+
     def status(self, platform='htcondor', **kwargs):
         if platform == 'htcondor':
             self._status_htcondor(**kwargs)
@@ -566,7 +566,7 @@ class JobManager:
             self._status_boinc(**kwargs)
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
-        
+
     def _status_htcondor(self, verbose=True, release_hold_jobs:bool=True, **kwargs):
         self.read_job_list()
         job_list = self._job_list.keys()
@@ -702,7 +702,7 @@ class JobManager:
             print(f"Missing results for the following jobs: {missing_results}")
         return results
 
-    def set_jobs_ready_to_be_removed(self, job_list:list|None=None, **kwarg):
+    def set_jobs_ready_to_be_removed(self, job_list=None, **kwarg):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
@@ -711,7 +711,7 @@ class JobManager:
         # Set jobs ready to be removed
         for job_name in job_list:
             self._job_list[job_name][3] = True
-    
+
     def _retrieve_boinc(self, job_list=None, **kwarg):
         raise NotImplementedError("BOINC retrieval not implemented yet!")
 
@@ -723,7 +723,7 @@ class JobManager:
         else:
             raise ValueError("Invalid platform! Use either 'htcondor' or 'boinc'!")
 
-    def _clean_htcondor(self, job_list:list|None=None, force:bool=False, remove_outputs:bool=True, **kwarg):
+    def _clean_htcondor(self, job_list=None, force:bool=False, remove_outputs:bool=True, **kwarg):
         self.read_job_list()
         if job_list is None:
             job_list = self._job_list.keys()
