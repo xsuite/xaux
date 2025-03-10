@@ -3,8 +3,9 @@
 # Copyright (c) CERN, 2025.                 #
 # ######################################### #
 
-import pytest
 import re
+import pytest
+import numpy as np
 
 from xaux import singleton
 
@@ -18,102 +19,45 @@ from xaux import singleton
 def test_singleton():
     # Non-singleton example.
     class NonSingletonClass:
-        def __init__(self, value=3):
-            self.value = value
+        def __init__(self, value1=3):
+            self.value1 = value1
 
     instance1 = NonSingletonClass()
-    assert instance1.value == 3
-    instance2 = NonSingletonClass(value=5)
+    assert instance1.value1 == 3
+    instance2 = NonSingletonClass(value1=5)
     assert instance1 is not instance2
     assert id(instance1) != id(instance2)
-    assert instance1.value == 3
-    assert instance2.value == 5
-    instance1.value = 7
-    assert instance1.value == 7
-    assert instance2.value == 5
+    assert instance1.value1 == 3
+    assert instance2.value1 == 5
+    instance1.value1 = 7
+    assert instance1.value1 == 7
+    assert instance2.value1 == 5
 
     @singleton
     class SingletonClass1:
-        def __init__(self, value=3):
-            self.value = value
+        def __init__(self, value1=3):
+            self.value1 = value1
 
-    # Initialise with default value
-    assert not hasattr(SingletonClass1, '_singleton_instance')
-    instance1 = SingletonClass1()
-    assert hasattr(SingletonClass1, '_singleton_instance')
-    assert instance1.value == 3
-
-    # Initialise with specific value
-    instance2 = SingletonClass1(value=5)
-    assert instance1 is instance2
-    assert id(instance1) == id(instance2)
-    assert instance1.value == 5
-    assert instance2.value == 5
-
-    # Initialise with default value again - this should not change the value
-    instance3 = SingletonClass1()
-    assert instance2 is instance3
-    assert id(instance2) == id(instance3)
-    assert instance1.value == 5
-    assert instance2.value == 5
-    assert instance3.value == 5
-
-    # Change the value of the instance
-    instance1.value = 7
-    assert instance1.value == 7
-    assert instance2.value == 7
-    assert instance3.value == 7
-
-    # Remove the singleton
-    SingletonClass1.delete()
-    assert not hasattr(SingletonClass1, '_singleton_instance')
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonClass1 "
-                                         + "has been invalidated!"):
-        instance1.value
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonClass1 "
-                                         + "has been invalidated!"):
-        instance2.value
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonClass1 "
-                                         + "has been invalidated!"):
-        instance3.value
-
-    # First initialisation with specific value
-    instance4 = SingletonClass1(value=8)
-    assert hasattr(SingletonClass1, '_singleton_instance')
-    assert instance4.value == 8
-    assert instance1 is not instance4
-    assert instance2 is not instance4
-    assert instance3 is not instance4
-    assert id(instance1) != id(instance4)
-    assert id(instance2) != id(instance4)
-    assert id(instance3) != id(instance4)
-
-    # Clean up
-    SingletonClass1.delete()
-    assert not hasattr(SingletonClass1, '_singleton_instance')
-
-    # Test double deletion
-    SingletonClass1.delete()
-    assert not hasattr(SingletonClass1, '_singleton_instance')
+    _assert_is_singleton(SingletonClass1, [instance1,instance2], 3)
 
 
 def test_nonsingleton_inheritance():
     class NonSingletonParent:
         def __init__(self, value1=3):
-            print("In NonSingletonParent __init__")
+            print("(in NonSingletonParent __init__)   ", end='', flush=True)
             self.value1 = value1
 
     @singleton
     class SingletonChild1(NonSingletonParent):
         def __init__(self, *args, value2=17, **kwargs):
-            print("In SingletonChild1 __init__")
+            print("(in SingletonChild1 __init__)   ", end='', flush=True)
             self.value2 = value2
             super().__init__(*args, **kwargs)
 
     @singleton
     class SingletonChild2(NonSingletonParent):
         def __init__(self, *args, value2=-13, **kwargs):
-            print("In SingletonChild2 __init__")
+            print("(in SingletonChild2 __init__)   ", end='', flush=True)
             self.value2 = value2
             super().__init__(*args, **kwargs)
 
@@ -125,694 +69,328 @@ def test_nonsingleton_inheritance():
     assert ns_parent_instance1.value1 == 8
     assert ns_parent_instance2.value1 == 9
 
-    # Test the singleton child class
-    child1_instance1 = SingletonChild1()
-    assert child1_instance1 is not ns_parent_instance1
-    assert child1_instance1.value1 == 3
-    assert child1_instance1.value2 == 17
-    child1_instance2 = SingletonChild1(value1=-2)
-    assert child1_instance2 is child1_instance1
-    assert child1_instance2 is not ns_parent_instance1
-    assert child1_instance1.value1 == -2
-    assert child1_instance1.value2 == 17
-    child1_instance3 = SingletonChild1(value2=-9)
-    assert child1_instance3 is child1_instance1
-    assert child1_instance3 is not ns_parent_instance1
-    assert child1_instance1.value1 == -2
-    assert child1_instance1.value2 == -9
-    child1_instance4 = SingletonChild1(value1=789, value2=-78)
-    assert child1_instance4 is child1_instance1
-    assert child1_instance4 is not ns_parent_instance1
-    assert child1_instance1.value1 == 789
-    assert child1_instance1.value2 == -78
-
-    # Test the other singleton child class
-    child2_instance1 = SingletonChild2()
-    assert child2_instance1 is not ns_parent_instance1
-    assert child2_instance1 is not ns_parent_instance2
-    assert child2_instance1 is not child1_instance1
-    assert child2_instance1 is not child1_instance2
-    assert child2_instance1 is not child1_instance3
-    assert child2_instance1 is not child1_instance4
-    assert child2_instance1.value1 == 3
-    assert child2_instance1.value2 == -13
-    child2_instance2 = SingletonChild2(value1=-4)
-    assert child2_instance2 is child2_instance1
-    assert child2_instance2 is not ns_parent_instance1
-    assert child2_instance2 is not ns_parent_instance2
-    assert child2_instance2 is not child1_instance1
-    assert child2_instance2 is not child1_instance2
-    assert child2_instance2 is not child1_instance3
-    assert child2_instance2 is not child1_instance4
-    assert child2_instance1.value1 == -4
-    assert child2_instance1.value2 == -13
-    child2_instance3 = SingletonChild2(value2=-9)
-    assert child2_instance3 is child2_instance1
-    assert child2_instance3 is child2_instance2
-    assert child2_instance3 is not ns_parent_instance1
-    assert child2_instance3 is not ns_parent_instance2
-    assert child2_instance3 is not child1_instance1
-    assert child2_instance3 is not child1_instance2
-    assert child2_instance3 is not child1_instance3
-    assert child2_instance3 is not child1_instance4
-    assert child2_instance1.value1 == -4
-    assert child2_instance1.value2 == -9
-    child2_instance4 = SingletonChild2(value1=127, value2=99)
-    assert child2_instance4 is child2_instance1
-    assert child2_instance4 is child2_instance2
-    assert child2_instance4 is child2_instance3
-    assert child2_instance4 is not ns_parent_instance1
-    assert child2_instance4 is not ns_parent_instance2
-    assert child2_instance4 is not child1_instance1
-    assert child2_instance4 is not child1_instance2
-    assert child2_instance4 is not child1_instance3
-    assert child2_instance4 is not child1_instance4
-    assert child2_instance1.value1 == 127
-    assert child2_instance1.value2 == 99
-
-    # Assert the (non-singleton) parent is not influenced by the children
-    ns_parent_instance3 = NonSingletonParent(value1=23)
-    assert ns_parent_instance1 is not ns_parent_instance2
-    assert ns_parent_instance3 is not ns_parent_instance1
-    assert child1_instance1 is not ns_parent_instance1
-    assert child1_instance2 is not ns_parent_instance1
-    assert child1_instance3 is not ns_parent_instance1
-    assert child1_instance4 is not ns_parent_instance1
-    assert child1_instance1 is not ns_parent_instance2
-    assert child1_instance2 is not ns_parent_instance2
-    assert child1_instance3 is not ns_parent_instance2
-    assert child1_instance4 is not ns_parent_instance2
-    assert child1_instance1 is not ns_parent_instance3
-    assert child1_instance2 is not ns_parent_instance3
-    assert child1_instance3 is not ns_parent_instance3
-    assert child1_instance4 is not ns_parent_instance3
-    assert child2_instance1 is not ns_parent_instance1
-    assert child2_instance2 is not ns_parent_instance1
-    assert child2_instance3 is not ns_parent_instance1
-    assert child2_instance4 is not ns_parent_instance1
-    assert child2_instance1 is not ns_parent_instance2
-    assert child2_instance2 is not ns_parent_instance2
-    assert child2_instance3 is not ns_parent_instance2
-    assert child2_instance4 is not ns_parent_instance2
-    assert child2_instance1 is not ns_parent_instance3
-    assert child2_instance2 is not ns_parent_instance3
-    assert child2_instance3 is not ns_parent_instance3
-    assert child2_instance4 is not ns_parent_instance3
-    assert ns_parent_instance1.value1 == 8
-    assert ns_parent_instance2.value1 == 9
-    assert ns_parent_instance3.value1 == 23
-    assert child1_instance1.value1 == 789
-    assert child1_instance1.value2 == -78
-    assert child2_instance1.value1 == 127
-    assert child2_instance1.value2 == 99
-
-    # Clean up
-    SingletonChild1.delete()
-    assert not hasattr(SingletonChild1, '_singleton_instance')
-    SingletonChild2.delete()
-    assert not hasattr(SingletonChild2, '_singleton_instance')
+    # Test the singleton child classes
+    _assert_is_singleton(SingletonChild1, [ns_parent_instance1,ns_parent_instance2], 3, 17)
+    child1_instance = SingletonChild1()
+    print(flush=True)
+    _assert_is_singleton(SingletonChild2, [child1_instance,ns_parent_instance1,ns_parent_instance2], 3, -13)
 
 
 def test_singleton_inheritance():
     @singleton
     class SingletonParent1:
         def __init__(self, value1=7):
-            print("In SingletonParent1 __init__")
+            print("(in SingletonParent1 __init__)   ", end='', flush=True)
             self.value1 = value1
 
     class SingletonChild3(SingletonParent1):
-        def __init__(self, *args, value2='lop', **kwargs):
-            print("In SingletonChild3 __init__")
+        def __init__(self, *args, value2=81, **kwargs):
+            print("(in SingletonChild3 __init__)   ", end='', flush=True)
             self.value2 = value2
             super().__init__(*args, **kwargs)
 
     class SingletonChild4(SingletonParent1):
         def __init__(self, *args, value2=0, **kwargs):
-            print("In SingletonChild4 __init__")
+            print("(in SingletonChild4 __init__)   ", end='', flush=True)
             self.value2 = value2
             super().__init__(*args, **kwargs)
 
-    # Test the singleton parent class
-    parent1_instance1 = SingletonParent1(value1=8)
-    assert parent1_instance1.value1 == 8
-    parent1_instance2 = SingletonParent1(value1=9)
-    assert parent1_instance1 is parent1_instance2
-    assert parent1_instance1.value1 == 9
-    assert parent1_instance2.value1 == 9
-
-    # Test the singleton child class
+    _assert_is_singleton(SingletonParent1, [], 7)
+    parent1_instance = SingletonParent1()
+    parent1_instance.value1 = 989
+    print(flush=True)
+    _assert_is_singleton(SingletonChild3, [parent1_instance], 7, 81)
     child3_instance1 = SingletonChild3()
-    assert child3_instance1 is not parent1_instance1
-    assert child3_instance1 is not parent1_instance2
-    # The parent values are INHERITED, but not SYNCED
-    assert child3_instance1.value1 == 7
-    assert child3_instance1.value2 == 'lop'
-    child3_instance2 = SingletonChild3(value1=-2)
-    assert child3_instance2 is child3_instance1
-    assert child3_instance2 is not parent1_instance1
-    assert child3_instance2 is not parent1_instance2
-    assert child3_instance1.value1 == -2
-    assert child3_instance1.value2 == 'lop'
-    child3_instance3 = SingletonChild3(value2=4.345)
-    assert child3_instance3 is child3_instance1
-    assert child3_instance3 is child3_instance2
-    assert child3_instance3 is not parent1_instance1
-    assert child3_instance3 is not parent1_instance2
-    assert child3_instance1.value1 == -2
-    assert child3_instance1.value2 == 4.345
-    child3_instance4 = SingletonChild3(value1='jej', value2='josepHArt')
-    assert child3_instance4 is child3_instance1
-    assert child3_instance4 is child3_instance2
-    assert child3_instance4 is child3_instance3
-    assert child3_instance4 is not parent1_instance1
-    assert child3_instance1.value1 == 'jej'
-    assert child3_instance1.value2 == 'josepHArt'
-
-    # Test the other singleton child class
-    child4_instance1 = SingletonChild4()
-    assert child4_instance1 is not parent1_instance1
-    assert child4_instance1 is not parent1_instance2
-    assert child4_instance1 is not child3_instance1
-    assert child4_instance1 is not child3_instance2
-    assert child4_instance1 is not child3_instance3
-    assert child4_instance1 is not child3_instance4
-    # The parent values are INHERITED, but not SYNCED
-    assert child4_instance1.value1 == 7
-    assert child4_instance1.value2 == 0
-    child4_instance2 = SingletonChild4(value1=0.11)
-    assert child4_instance2 is child4_instance1
-    assert child4_instance2 is not parent1_instance1
-    assert child4_instance2 is not parent1_instance2
-    assert child4_instance2 is not child3_instance1
-    assert child4_instance2 is not child3_instance2
-    assert child4_instance2 is not child3_instance3
-    assert child4_instance2 is not child3_instance4
-    assert child4_instance1.value1 == 0.11
-    assert child4_instance1.value2 == 0
-    child4_instance3 = SingletonChild4(value2=6)
-    assert child4_instance3 is child4_instance1
-    assert child4_instance3 is child4_instance2
-    assert child4_instance3 is not parent1_instance1
-    assert child4_instance3 is not parent1_instance2
-    assert child4_instance3 is not child3_instance1
-    assert child4_instance3 is not child3_instance2
-    assert child4_instance3 is not child3_instance3
-    assert child4_instance3 is not child3_instance4
-    assert child4_instance1.value1 == 0.11
-    assert child4_instance1.value2 == 6
-    child4_instance4 = SingletonChild4(value1='hoho', value2=22)
-    assert child4_instance4 is child4_instance1
-    assert child4_instance4 is child4_instance2
-    assert child4_instance4 is child4_instance3
-    assert child4_instance4 is not parent1_instance1
-    assert child4_instance4 is not parent1_instance2
-    assert child4_instance4 is not child3_instance1
-    assert child4_instance4 is not child3_instance2
-    assert child4_instance4 is not child3_instance3
-    assert child4_instance4 is not child3_instance4
-    assert child4_instance1.value1 == 'hoho'
-    assert child4_instance1.value2 == 22
-
-    # Assert the (singleton) parent is not influenced by the children
-    assert parent1_instance2 is parent1_instance1
-    assert child3_instance1 is not parent1_instance1
-    assert child3_instance2 is not parent1_instance1
-    assert child3_instance3 is not parent1_instance1
-    assert child3_instance4 is not parent1_instance1
-    assert child3_instance1 is not parent1_instance2
-    assert child3_instance2 is not parent1_instance2
-    assert child3_instance3 is not parent1_instance2
-    assert child3_instance4 is not parent1_instance2
-    assert child4_instance1 is not parent1_instance1
-    assert child4_instance2 is not parent1_instance1
-    assert child4_instance3 is not parent1_instance1
-    assert child4_instance4 is not parent1_instance1
-    assert child4_instance1 is not parent1_instance2
-    assert child4_instance2 is not parent1_instance2
-    assert child4_instance3 is not parent1_instance2
-    assert child4_instance4 is not parent1_instance2
-    assert parent1_instance1.value1 == 9
-    assert parent1_instance2.value1 == 9
-    parent1_instance3 = SingletonParent1(value1=23)
-    assert parent1_instance2 is parent1_instance1
-    assert parent1_instance3 is parent1_instance2
-    assert child3_instance1 is not parent1_instance1
-    assert child3_instance2 is not parent1_instance1
-    assert child3_instance3 is not parent1_instance1
-    assert child3_instance4 is not parent1_instance1
-    assert child3_instance1 is not parent1_instance2
-    assert child3_instance2 is not parent1_instance2
-    assert child3_instance3 is not parent1_instance2
-    assert child3_instance4 is not parent1_instance2
-    assert child4_instance1 is not parent1_instance1
-    assert child4_instance2 is not parent1_instance1
-    assert child4_instance3 is not parent1_instance1
-    assert child4_instance4 is not parent1_instance1
-    assert child4_instance1 is not parent1_instance2
-    assert child4_instance2 is not parent1_instance2
-    assert child4_instance3 is not parent1_instance2
-    assert child4_instance4 is not parent1_instance2
-    assert parent1_instance1.value1 == 23
-    assert parent1_instance2.value1 == 23
-    assert parent1_instance3.value1 == 23
-    assert child3_instance1.value1 == 'jej'
-    assert child3_instance1.value2 == 'josepHArt'
-    assert child4_instance1.value1 == 'hoho'
-    assert child4_instance1.value2 == 22
+    child3_instance1.value1 = 111
+    child3_instance1.value2 = -333
+    print(flush=True)
+    _assert_is_singleton(SingletonChild4, [child3_instance1,parent1_instance], 7, 0)
 
     # Now delete all and start fresh, to ensure children can instantiate without parent existing.
     SingletonParent1.delete()
-    assert not hasattr(SingletonParent1, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonParent1.__dict__
     SingletonChild3.delete()
-    assert not hasattr(SingletonChild3, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild3.__dict__
     SingletonChild4.delete()
-    assert not hasattr(SingletonChild4, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild4.__dict__
 
-    # Test the singleton child class without parent
-    child3_instance5 = SingletonChild3()
-    # The parent values are INHERITED, but not SYNCED
-    assert child3_instance5.value1 == 7
-    assert child3_instance5.value2 == 'lop'
-    child3_instance6 = SingletonChild3(value1=-2)
-    assert child3_instance6 is child3_instance5
-    assert child3_instance5.value1 == -2
-    assert child3_instance5.value2 == 'lop'
-    child3_instance7 = SingletonChild3(value2=4.345)
-    assert child3_instance7 is child3_instance5
-    assert child3_instance7 is child3_instance6
-    assert child3_instance5.value1 == -2
-    assert child3_instance5.value2 == 4.345
-    child3_instance8 = SingletonChild3(value1='jej', value2='josepHArt')
-    assert child3_instance8 is child3_instance5
-    assert child3_instance8 is child3_instance6
-    assert child3_instance8 is child3_instance7
-    assert child3_instance5.value1 == 'jej'
-    assert child3_instance5.value2 == 'josepHArt'
-
-    # Test the other singleton child class without parent
-    child4_instance5 = SingletonChild4()
-    assert child4_instance5 is not child3_instance5
-    assert child4_instance5 is not child3_instance6
-    assert child4_instance5 is not child3_instance7
-    assert child4_instance5 is not child3_instance8
-    # The parent values are INHERITED, but not SYNCED
-    assert child4_instance5.value1 == 7
-    assert child4_instance5.value2 == 0
-    child4_instance6 = SingletonChild4(value1=0.11)
-    assert child4_instance6 is child4_instance5
-    assert child4_instance6 is not child3_instance5
-    assert child4_instance6 is not child3_instance6
-    assert child4_instance6 is not child3_instance7
-    assert child4_instance6 is not child3_instance8
-    assert child4_instance5.value1 == 0.11
-    assert child4_instance5.value2 == 0
-    child4_instance7 = SingletonChild4(value2=6)
-    assert child4_instance7 is child4_instance5
-    assert child4_instance7 is child4_instance6
-    assert child4_instance7 is not child3_instance5
-    assert child4_instance7 is not child3_instance6
-    assert child4_instance7 is not child3_instance7
-    assert child4_instance7 is not child3_instance8
-    assert child4_instance5.value1 == 0.11
-    assert child4_instance5.value2 == 6
-    child4_instance8 = SingletonChild4(value1='hoho', value2=22)
-    assert child4_instance8 is child4_instance5
-    assert child4_instance8 is child4_instance6
-    assert child4_instance8 is child4_instance7
-    assert child4_instance8 is not child3_instance5
-    assert child4_instance8 is not child3_instance6
-    assert child4_instance8 is not child3_instance7
-    assert child4_instance8 is not child3_instance8
-    assert child4_instance5.value1 == 'hoho'
-    assert child4_instance5.value2 == 22
-
-    # Clean up
-    SingletonChild3.delete()
-    assert not hasattr(SingletonChild3, '_singleton_instance')
-    SingletonChild4.delete()
-    assert not hasattr(SingletonChild4, '_singleton_instance')
+    _assert_is_singleton(SingletonChild3, [], 7, 81)
+    child3_instance2 = SingletonChild3()
+    child3_instance2.value1 = 111
+    child3_instance2.value2 = -333
+    print(flush=True)
+    _assert_is_singleton(SingletonChild4, [child3_instance2], 7, 0)
 
 
 # This is the same test as above, but with the singleton decorator applied to parent and child
 def test_double_singleton_inheritance():
     @singleton
     class SingletonParent2:
-        def __init__(self, value1=7):
-            print("In SingletonParent2 __init__")
+        def __init__(self, value1=6):
+            print("(in SingletonParent2 __init__)   ", end='', flush=True)
             self.value1 = value1
 
     @singleton
     class SingletonChild5(SingletonParent2):
-        def __init__(self, *args, value2='lop', **kwargs):
-            print("In SingletonChild5 __init__")
+        def __init__(self, *args, value2=82, **kwargs):
+            print("(in SingletonChild5 __init__)   ", end='', flush=True)
             self.value2 = value2
             super().__init__(*args, **kwargs)
 
     @singleton
     class SingletonChild6(SingletonParent2):
-        def __init__(self, *args, value2=0, **kwargs):
-            print("In SingletonChild6 __init__")
+        def __init__(self, *args, value2=-2, **kwargs):
+            print("(in SingletonChild6 __init__)   ", end='', flush=True)
             self.value2 = value2
             super().__init__(*args, **kwargs)
 
-    # Test the singleton parent class
-    parent2_instance1 = SingletonParent2(value1=8)
-    assert parent2_instance1.value1 == 8
-    parent2_instance2 = SingletonParent2(value1=9)
-    assert parent2_instance1 is parent2_instance2
-    assert parent2_instance1.value1 == 9
-    assert parent2_instance2.value1 == 9
-
-    # Test the singleton child class
+    _assert_is_singleton(SingletonParent2, [], 6)
+    parent2_instance = SingletonParent2()
+    parent2_instance.value1 = 989
+    print(flush=True)
+    _assert_is_singleton(SingletonChild5, [parent2_instance], 6, 82)
     child5_instance1 = SingletonChild5()
-    assert child5_instance1 is not parent2_instance1
-    assert child5_instance1 is not parent2_instance2
-    # The parent values are INHERITED, but not SYNCED
-    assert child5_instance1.value1 == 7
-    assert child5_instance1.value2 == 'lop'
-    child5_instance2 = SingletonChild5(value1=-2)
-    assert child5_instance2 is child5_instance1
-    assert child5_instance2 is not parent2_instance1
-    assert child5_instance2 is not parent2_instance2
-    assert child5_instance1.value1 == -2
-    assert child5_instance1.value2 == 'lop'
-    child5_instance3 = SingletonChild5(value2=4.345)
-    assert child5_instance3 is child5_instance1
-    assert child5_instance3 is child5_instance2
-    assert child5_instance3 is not parent2_instance1
-    assert child5_instance3 is not parent2_instance2
-    assert child5_instance1.value1 == -2
-    assert child5_instance1.value2 == 4.345
-    child5_instance4 = SingletonChild5(value1='jej', value2='josepHArt')
-    assert child5_instance4 is child5_instance1
-    assert child5_instance4 is child5_instance2
-    assert child5_instance4 is child5_instance3
-    assert child5_instance4 is not parent2_instance1
-    assert child5_instance1.value1 == 'jej'
-    assert child5_instance1.value2 == 'josepHArt'
-
-    # Test the other singleton child class
-    child6_instance1 = SingletonChild6()
-    assert child6_instance1 is not parent2_instance1
-    assert child6_instance1 is not parent2_instance2
-    assert child6_instance1 is not child5_instance1
-    assert child6_instance1 is not child5_instance2
-    assert child6_instance1 is not child5_instance3
-    assert child6_instance1 is not child5_instance4
-    # The parent values are INHERITED, but not SYNCED
-    assert child6_instance1.value1 == 7
-    assert child6_instance1.value2 == 0
-    child6_instance2 = SingletonChild6(value1=0.11)
-    assert child6_instance2 is child6_instance1
-    assert child6_instance2 is not parent2_instance1
-    assert child6_instance2 is not parent2_instance2
-    assert child6_instance2 is not child5_instance1
-    assert child6_instance2 is not child5_instance2
-    assert child6_instance2 is not child5_instance3
-    assert child6_instance2 is not child5_instance4
-    assert child6_instance1.value1 == 0.11
-    assert child6_instance1.value2 == 0
-    child6_instance3 = SingletonChild6(value2=6)
-    assert child6_instance3 is child6_instance1
-    assert child6_instance3 is child6_instance2
-    assert child6_instance3 is not parent2_instance1
-    assert child6_instance3 is not parent2_instance2
-    assert child6_instance3 is not child5_instance1
-    assert child6_instance3 is not child5_instance2
-    assert child6_instance3 is not child5_instance3
-    assert child6_instance3 is not child5_instance4
-    assert child6_instance1.value1 == 0.11
-    assert child6_instance1.value2 == 6
-    child6_instance4 = SingletonChild6(value1='hoho', value2=22)
-    assert child6_instance4 is child6_instance1
-    assert child6_instance4 is child6_instance2
-    assert child6_instance4 is child6_instance3
-    assert child6_instance4 is not parent2_instance1
-    assert child6_instance4 is not parent2_instance2
-    assert child6_instance4 is not child5_instance1
-    assert child6_instance4 is not child5_instance2
-    assert child6_instance4 is not child5_instance3
-    assert child6_instance4 is not child5_instance4
-    assert child6_instance1.value1 == 'hoho'
-    assert child6_instance1.value2 == 22
-
-    # Assert the (singleton) parent is not influenced by the children
-    assert parent2_instance2 is parent2_instance1
-    assert child5_instance1 is not parent2_instance1
-    assert child5_instance2 is not parent2_instance1
-    assert child5_instance3 is not parent2_instance1
-    assert child5_instance4 is not parent2_instance1
-    assert child5_instance1 is not parent2_instance2
-    assert child5_instance2 is not parent2_instance2
-    assert child5_instance3 is not parent2_instance2
-    assert child5_instance4 is not parent2_instance2
-    assert child6_instance1 is not parent2_instance1
-    assert child6_instance2 is not parent2_instance1
-    assert child6_instance3 is not parent2_instance1
-    assert child6_instance4 is not parent2_instance1
-    assert child6_instance1 is not parent2_instance2
-    assert child6_instance2 is not parent2_instance2
-    assert child6_instance3 is not parent2_instance2
-    assert child6_instance4 is not parent2_instance2
-    assert parent2_instance1.value1 == 9
-    assert parent2_instance2.value1 == 9
-    parent2_instance3 = SingletonParent2(value1=23)
-    assert parent2_instance2 is parent2_instance1
-    assert parent2_instance3 is parent2_instance2
-    assert child5_instance1 is not parent2_instance1
-    assert child5_instance2 is not parent2_instance1
-    assert child5_instance3 is not parent2_instance1
-    assert child5_instance4 is not parent2_instance1
-    assert child5_instance1 is not parent2_instance2
-    assert child5_instance2 is not parent2_instance2
-    assert child5_instance3 is not parent2_instance2
-    assert child5_instance4 is not parent2_instance2
-    assert child6_instance1 is not parent2_instance1
-    assert child6_instance2 is not parent2_instance1
-    assert child6_instance3 is not parent2_instance1
-    assert child6_instance4 is not parent2_instance1
-    assert child6_instance1 is not parent2_instance2
-    assert child6_instance2 is not parent2_instance2
-    assert child6_instance3 is not parent2_instance2
-    assert child6_instance4 is not parent2_instance2
-    assert parent2_instance1.value1 == 23
-    assert parent2_instance2.value1 == 23
-    assert parent2_instance3.value1 == 23
-    assert child5_instance1.value1 == 'jej'
-    assert child5_instance1.value2 == 'josepHArt'
-    assert child6_instance1.value1 == 'hoho'
-    assert child6_instance1.value2 == 22
+    child5_instance1.value1 = 222
+    child5_instance1.value2 = -666
+    print(flush=True)
+    _assert_is_singleton(SingletonChild6, [child5_instance1,parent2_instance], 6, -2)
 
     # Now delete all and start fresh, to ensure children can instantiate without parent existing.
     SingletonParent2.delete()
-    assert not hasattr(SingletonParent2, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonParent2.__dict__
     SingletonChild5.delete()
-    assert not hasattr(SingletonChild5, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild5.__dict__
     SingletonChild6.delete()
-    assert not hasattr(SingletonChild6, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild6.__dict__
 
-    # Test the singleton child class without parent
-    child5_instance5 = SingletonChild5()
-    # The parent values are INHERITED, but not SYNCED
-    assert child5_instance5.value1 == 7
-    assert child5_instance5.value2 == 'lop'
-    child5_instance6 = SingletonChild5(value1=-2)
-    assert child5_instance6 is child5_instance5
-    assert child5_instance5.value1 == -2
-    assert child5_instance5.value2 == 'lop'
-    child5_instance7 = SingletonChild5(value2=4.345)
-    assert child5_instance7 is child5_instance5
-    assert child5_instance7 is child5_instance6
-    assert child5_instance5.value1 == -2
-    assert child5_instance5.value2 == 4.345
-    child5_instance8 = SingletonChild5(value1='jej', value2='josepHArt')
-    assert child5_instance8 is child5_instance5
-    assert child5_instance8 is child5_instance6
-    assert child5_instance8 is child5_instance7
-    assert child5_instance5.value1 == 'jej'
-    assert child5_instance5.value2 == 'josepHArt'
-
-    # Test the other singleton child class without parent
-    child6_instance5 = SingletonChild6()
-    assert child6_instance5 is not child5_instance5
-    assert child6_instance5 is not child5_instance6
-    assert child6_instance5 is not child5_instance7
-    assert child6_instance5 is not child5_instance8
-    # The parent values are INHERITED, but not SYNCED
-    assert child6_instance5.value1 == 7
-    assert child6_instance5.value2 == 0
-    child6_instance6 = SingletonChild6(value1=0.11)
-    assert child6_instance6 is child6_instance5
-    assert child6_instance6 is not child5_instance5
-    assert child6_instance6 is not child5_instance6
-    assert child6_instance6 is not child5_instance7
-    assert child6_instance6 is not child5_instance8
-    assert child6_instance5.value1 == 0.11
-    assert child6_instance5.value2 == 0
-    child6_instance7 = SingletonChild6(value2=6)
-    assert child6_instance7 is child6_instance5
-    assert child6_instance7 is child6_instance6
-    assert child6_instance7 is not child5_instance5
-    assert child6_instance7 is not child5_instance6
-    assert child6_instance7 is not child5_instance7
-    assert child6_instance7 is not child5_instance8
-    assert child6_instance5.value1 == 0.11
-    assert child6_instance5.value2 == 6
-    child6_instance8 = SingletonChild6(value1='hoho', value2=22)
-    assert child6_instance8 is child6_instance5
-    assert child6_instance8 is child6_instance6
-    assert child6_instance8 is child6_instance7
-    assert child6_instance8 is not child5_instance5
-    assert child6_instance8 is not child5_instance6
-    assert child6_instance8 is not child5_instance7
-    assert child6_instance8 is not child5_instance8
-    assert child6_instance5.value1 == 'hoho'
-    assert child6_instance5.value2 == 22
-
-    # Clean up
-    SingletonChild5.delete()
-    assert not hasattr(SingletonChild5, '_singleton_instance')
-    SingletonChild6.delete()
-    assert not hasattr(SingletonChild6, '_singleton_instance')
+    _assert_is_singleton(SingletonChild5, [], 6, 82)
+    child5_instance2 = SingletonChild5()
+    child5_instance2.value1 = 111
+    child5_instance2.value2 = -333
+    print(flush=True)
+    _assert_is_singleton(SingletonChild6, [child5_instance2], 6, -2)
 
 
 def test_singleton_grand_inheritance():
     @singleton
     class SingletonParent3:
         def __init__(self, value1=4):
-            print("In SingletonParent2 __init__")
+            print("(in SingletonParent2 __init__)   ", end='', flush=True)
             self.value1 = value1
 
     class SingletonChild7(SingletonParent3):
-        def __init__(self, *args, value2='tsss', **kwargs):
-            print("In SingletonChild7 __init__")
+        def __init__(self, *args, value2=137, **kwargs):
+            print("(in SingletonChild7 __init__)   ", end='', flush=True)
             self.value2 = value2
             super().__init__(*args, **kwargs)
 
     class SingletonGrandChild(SingletonChild7):
-        def __init__(self, *args, value3='jeeej', **kwargs):
-            print("In SingletonGrandChild __init__")
+        def __init__(self, *args, value3=19870, **kwargs):
+            print("(in SingletonGrandChild __init__)   ", end='', flush=True)
             self.value3 = value3
             super().__init__(*args, **kwargs)
 
-    # Test the singleton parent class
-    parent3_instance1 = SingletonParent3()
-    assert parent3_instance1.value1 == 4
-    parent3_instance2 = SingletonParent3(value1=5)
-    assert parent3_instance1 is parent3_instance2
-    assert parent3_instance1.value1 == 5
-    assert parent3_instance2.value1 == 5
-
-    # Test the singleton child class
+    _assert_is_singleton(SingletonParent3, [], 4)
+    parent3_instance = SingletonParent3()
+    parent3_instance.value1 = 444
+    print(flush=True)
+    _assert_is_singleton(SingletonChild7, [parent3_instance], 4, 137)
     child7_instance1 = SingletonChild7()
-    assert child7_instance1 is not parent3_instance1
-    assert child7_instance1 is not parent3_instance2
-    # The parent values are INHERITED, but not SYNCED
-    assert child7_instance1.value1 == 4
-    assert child7_instance1.value2 == 'tsss'
-    child7_instance2 = SingletonChild7(value1=3, value2='pop')
-    assert child7_instance2 is child7_instance1
-    assert child7_instance2 is not parent3_instance1
-    assert child7_instance2 is not parent3_instance2
-    assert child7_instance1.value1 == 3
-    assert child7_instance1.value2 == 'pop'
+    child7_instance1.value1 = 678
+    child7_instance1.value2 = -987
+    print(flush=True)
+    _assert_is_singleton(SingletonGrandChild, [child7_instance1,parent3_instance], 4, 137, 19870)
 
-    # Test the singleton grandchild class
-    grandchild_instance1 = SingletonGrandChild()
-    assert grandchild_instance1 is not parent3_instance1
-    assert grandchild_instance1 is not parent3_instance2
-    assert grandchild_instance1 is not child7_instance1
-    assert grandchild_instance1 is not child7_instance2
-    # The parent and grandparent values are INHERITED, but not SYNCED
-    assert grandchild_instance1.value1 == 4
-    assert grandchild_instance1.value2 == 'tsss'
-    assert grandchild_instance1.value3 == 'jeeej'
-    assert child7_instance1.value1 == 3
-    assert child7_instance1.value2 == 'pop'
-    assert parent3_instance1.value1 == 5
-    grandchild_instance2 = SingletonGrandChild(value1=1, value2='doll', value3='happy')
-    assert grandchild_instance2 is grandchild_instance1
-    assert grandchild_instance2 is not parent3_instance1
-    assert grandchild_instance2 is not parent3_instance2
-    assert grandchild_instance2 is not child7_instance1
-    assert grandchild_instance2 is not child7_instance2
-    assert grandchild_instance1.value1 == 1
-    assert grandchild_instance1.value2 == 'doll'
-    assert grandchild_instance1.value3 == 'happy'
-    assert child7_instance1.value1 == 3
-    assert child7_instance1.value2 == 'pop'
-    assert parent3_instance1.value1 == 5
-
-    # Now delete all and start fresh, to ensure grandchildren can instantiate without (grand)parents existing.
+    # Now delete all and start fresh, to ensure children can instantiate without the parent existing.
     SingletonParent3.delete()
-    assert not hasattr(SingletonParent3, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonParent3.__dict__
     SingletonChild7.delete()
-    assert not hasattr(SingletonChild7, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild7.__dict__
     SingletonGrandChild.delete()
-    assert not hasattr(SingletonGrandChild, '_singleton_instance')
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonParent3 "
-                                         + "has been invalidated!"):
-        parent3_instance1.value1
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonParent3 "
-                                         + "has been invalidated!"):
-        parent3_instance2.value1
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonChild7 "
-                                         + "has been invalidated!"):
-        child7_instance1.value1
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonChild7 "
-                                         + "has been invalidated!"):
-        child7_instance1.value2
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonChild7 "
-                                         + "has been invalidated!"):
-        child7_instance2.value1
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonChild7 "
-                                         + "has been invalidated!"):
-        child7_instance2.value2
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonGrandChild "
-                                         + "has been invalidated!"):
-        grandchild_instance1.value1
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonGrandChild "
-                                         + "has been invalidated!"):
-        grandchild_instance1.value2
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonGrandChild "
-                                         + "has been invalidated!"):
-        grandchild_instance1.value3
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonGrandChild "
-                                         + "has been invalidated!"):
-        grandchild_instance2.value1
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonGrandChild "
-                                         + "has been invalidated!"):
-        grandchild_instance2.value2
-    with pytest.raises(RuntimeError, match="This instance of the singleton SingletonGrandChild "
-                                         + "has been invalidated!"):
-        grandchild_instance2.value3
+    assert '_singleton_instance' not in SingletonGrandChild.__dict__
 
-    grandchild_instance3 = SingletonGrandChild()
-    assert grandchild_instance3 is not grandchild_instance1
-    assert grandchild_instance3 is not grandchild_instance2
-    assert grandchild_instance3 is not parent3_instance1
-    assert grandchild_instance3 is not parent3_instance2
-    assert grandchild_instance3 is not child7_instance1
-    assert grandchild_instance3 is not child7_instance2
-    assert grandchild_instance3.value1 == 4
-    assert grandchild_instance3.value2 == 'tsss'
-    assert grandchild_instance3.value3 == 'jeeej'
-    grandchild_instance4 = SingletonGrandChild(value1=101, value2='poupee', value3='sad')
-    assert grandchild_instance4 is grandchild_instance3
-    assert grandchild_instance4 is not grandchild_instance1
-    assert grandchild_instance4 is not grandchild_instance2
-    assert grandchild_instance4 is not parent3_instance1
-    assert grandchild_instance4 is not parent3_instance2
-    assert grandchild_instance4 is not child7_instance1
-    assert grandchild_instance4 is not child7_instance2
-    assert grandchild_instance3.value1 == 101
-    assert grandchild_instance3.value2 == 'poupee'
-    assert grandchild_instance3.value3 == 'sad'
+    _assert_is_singleton(SingletonChild7, [], 4, 137)
+    child7_instance2 = SingletonChild7()
+    child7_instance2.value1 = -678
+    child7_instance2.value2 = 987
+    print(flush=True)
+    _assert_is_singleton(SingletonGrandChild, [child7_instance2], 4, 137, 19870)
 
-    # Clean up
+    # Now delete all and start fresh, to ensure grandchildren can instantiate without the parent existing.
+    SingletonChild7.delete()
+    assert '_singleton_instance' not in SingletonChild7.__dict__
     SingletonGrandChild.delete()
-    assert not hasattr(SingletonGrandChild, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonGrandChild.__dict__
 
+    _assert_is_singleton(SingletonGrandChild, [], 4, 137, 19870)
+
+
+def _assert_is_singleton(cls, other_cls_instances, value1_init, value2_init=None, value3_init=None):
+    rng = np.random.default_rng()
+    value1_test_vals = [value1_init, *rng.integers(low=-587692, high=6284724, size=10_000)]
+    value2_test_vals = [value2_init, *rng.integers(low=-587692, high=6284724, size=10_000)]
+    value3_test_vals = [value3_init, *rng.integers(low=-587692, high=6284724, size=10_000)]
+
+    # These tests are overly overly verbose and expanded, to try to catch all possible corner cases.
+    # We are comparing every time again all instances to each other.
+
+    # This is an instance of another (maybe related) class, which should never be influenced by what we do on cls
+    ref_values1 = [inst.value1 for inst in other_cls_instances]
+    ref_values2 = [inst.value2 if hasattr(inst, 'value2') else None
+                   for inst in other_cls_instances]
+    ref_values3 = [inst.value3 if hasattr(inst, 'value3') else None
+                   for inst in other_cls_instances]
+
+    def init_switch(init_type, instances, i):
+        if init_type is None:
+            print(f"Initialise {cls.__name__} with default values (value1={value1_init}, value2={value2_init}, "
+                + f"value3={value3_init})... ", end='', flush=True)
+            instances.insert(0, cls())
+        elif init_type == '1':
+            i['1'] += 1
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]}, others default (value2="
+                + f"{value2_init}, value3={value3_init})... ", end='', flush=True)
+            instances.insert(0, cls(value1=value1_test_vals[i['1']]))
+        elif init_type == '2' and value2_init is not None:
+            i['2'] += 1
+            print(f"Initialise {cls.__name__} with value2={value2_test_vals[i['2']]}, others default (value1="
+                + f"{value1_init}, value3={value3_init})... ", end='', flush=True)
+            instances.insert(0, cls(value2=value2_test_vals[i['2']]))
+        elif init_type == '3' and value3_init is not None:
+            i['3'] += 1
+            print(f"Initialise {cls.__name__} with value3={value3_test_vals[i['3']]}, others default (value1="
+                + f"{value1_init}, value2={value2_init})... ", end='', flush=True)
+            instances.insert(0, cls(value3=value3_test_vals[i['3']]))
+        elif init_type == '12' and value2_init is not None:
+            i['1'] += 1
+            i['2'] += 1
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]} and value2={value2_test_vals[i['2']]}, "
+                + f"others default (value3={value3_init})... ", end='', flush=True)
+            instances.insert(0, cls(value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']]))
+        elif init_type == '13' and value3_init is not None:
+            i['1'] += 1
+            i['3'] += 1
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]} and value3={value3_test_vals[i['3']]}, "
+                + f"others default (value2={value2_init})... ", end='', flush=True)
+            instances.insert(0, cls(value1=value1_test_vals[i['1']], value3=value3_test_vals[i['3']]))
+        elif init_type == '23' and value2_init is not None and value3_init is not None:
+            i['2'] += 1
+            i['3'] += 1
+            print(f"Initialise {cls.__name__} with value2={value2_test_vals[i['2']]} and value3={value3_test_vals[i['3']]}, "
+                + f"others default (value1={value1_init})... ", end='', flush=True)
+            instances.insert(0, cls(value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']]))
+        elif init_type == '123' and value2_init is not None and value3_init is not None:
+            i['1'] += 1
+            i['2'] += 1
+            i['3'] += 1
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]}, value2={value2_test_vals[i['2']]} "
+                + f"and value3={value3_test_vals[i['3']]}... ", end='', flush=True)
+            instances.insert(0, cls(value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']]))
+
+    def assert_singleton(this_instance, *args, value1, value2, value3):
+        assert this_instance is cls._singleton_instance
+        for other_instance in args:
+            assert this_instance is other_instance
+            assert id(this_instance) == id(other_instance)
+        assert this_instance.value1 == value1
+        if value2_init is not None:
+            assert this_instance.value2 == value2
+        if value3_init is not None:
+            assert this_instance.value3 == value3
+        # Assert the other instances are unaffected
+        for inst, ref_value1, ref_value2, ref_value3 in zip(other_cls_instances, ref_values1, ref_values2, ref_values3):
+            assert inst is not this_instance
+            assert inst.value1 == ref_value1
+            if ref_value2 is not None:
+                assert inst.value2 == ref_value2
+            if ref_value3 is not None:
+                assert inst.value3 == ref_value3
+
+    def assert_and_increase_vals(instances, i):
+        assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
+        print("OK", flush=True)
+        i['1'] += 1
+        j = 1 if len(instances) > 1 else 0
+        print(f"Overwriting value1={value1_test_vals[i['1']]}... ", end='', flush=True)
+        instances[j].value1 = value1_test_vals[i['1']]
+        assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
+        print("OK", flush=True)
+        if value2_init is not None:
+            i['2'] += 1
+            print(f"Overwriting value2={value2_test_vals[i['2']]}... ", end='', flush=True)
+            instances[j].value2 = value2_test_vals[i['2']]
+            assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
+            print("OK", flush=True)
+        if value3_init is not None:
+            i['3'] += 1
+            print(f"Overwriting value3={value3_test_vals[i['3']]}... ", end='', flush=True)
+            instances[j].value3 = value3_test_vals[i['3']]
+            assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
+            print("OK", flush=True)
+
+    # Initialise with default values first, then initialise with value1, then value2, then both
+    if value2_init is None and value3_init is None:
+        first_init_switches = [None, '1']
+    elif value3_init is None:
+        first_init_switches = [None, '1', '2', '12']
+    else:
+        first_init_switches = [None, '1', '2', '3', '12', '13', '23', '123']
+    for first_init_switch in first_init_switches:
+        print("First initialisation!   ", end='', flush=True)
+        instances = []
+        i = {'1': 0, '2': 0, '3': 0}
+        assert '_singleton_instance' not in cls.__dict__
+        init_switch(first_init_switch, instances, i)
+        assert '_singleton_instance' in cls.__dict__
+        assert hasattr(cls._singleton_instance, '_initialised')
+        assert cls._singleton_instance._initialised
+        assert_and_increase_vals(instances, i)
+
+        init_switch('1', instances, i)
+        assert_and_increase_vals(instances, i)
+        init_switch('1', instances, i)
+        assert_and_increase_vals(instances, i)
+        init_switch(None, instances, i)
+        assert_and_increase_vals(instances, i)
+        if value2_init is not None:
+            init_switch('2', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('1', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('2', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('2', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('12', instances, i)
+            assert_and_increase_vals(instances, i)
+        if value3_init is not None:
+            init_switch('3', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('2', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('2', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('23', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('13', instances, i)
+            assert_and_increase_vals(instances, i)
+            init_switch('123', instances, i)
+            assert_and_increase_vals(instances, i)
+
+        cls.delete()
+        assert '_singleton_instance' not in cls.__dict__
+        for inst in instances:
+            with pytest.raises(RuntimeError, match=f"This instance of the singleton {cls.__name__} "
+                                                  + "has been invalidated!"):
+                inst.value
+        # Double deletion should not influence anything
+        cls.delete()
+        assert '_singleton_instance' not in cls.__dict__
+        for inst in instances:
+            with pytest.raises(RuntimeError, match=f"This instance of the singleton {cls.__name__} "
+                                                  + "has been invalidated!"):
+                inst.value
+        print(flush=True)
 
 def test_get_self():
     @singleton
@@ -1192,6 +770,7 @@ def test_singleton_with_custom_dunder_with_inheritance():
             print("In SingletonChild9 __init__")
             self.value = value
             self.test_var_init = 40
+            super().__init__()
 
         def __getattribute__(self, name):
             print("In SingletonChild9 __getattribute__")
