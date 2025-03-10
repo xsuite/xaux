@@ -61,30 +61,13 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
 
     # Internal decorator definition to used without arguments
     def decorator_singleton(cls):
-        # Verify any existing __init__ method only has optional values
-        original_init = cls.__dict__.get('__init__')
-        if original_init is not None and count_required_arguments(original_init) > 1:
-            raise TypeError(f"Cannot create a singleton for class {cls.__name__} with an "
-                          + f"__init__ method that has more than one required argument (only "
-                          + f"'self' is allowed)!")
+        if _has_singleton_parent(cls):
+            # No need to decorate this class, as it will be dealt with by the
+            # parent's __init_subclass__.
+            return cls
 
-        # Check the class doesn't already have a get_self method
-        if cls.__dict__.get('get_self') is not None:
-            raise TypeError(f"Class {cls.__name__} provides a 'get_self' method. This is not "
-                            + "compatible with the singleton decorator!")
-
-        # Check the class doesn't already have a delete method
-        if cls.__dict__.get('delete') is not None:
-            raise TypeError(f"Class {cls.__name__} provides a 'delete' method. This is not "
-                           + "compatible with the singleton decorator!")
-
-        # Define wrapper names
-        wrap_new = cls.__new__ if cls.__dict__.get('__new__') is not None \
-                               else Singleton.__new__
-        wrap_init = cls.__init__ if cls.__dict__.get('__init__') is not None \
-                                 else Singleton.__init__
-        wrap_getattribute = cls.__getattribute__ if cls.__dict__.get('__getattribute__') \
-                                               is not None else Singleton.__getattribute__
+        _check_singleton_compatibility(cls)
+        wrap_new, wrap_init, wrap_init_subclass, wrap_getattribute = _get_cls_functions(cls)
 
         @functools.wraps(cls, updated=())
         class LocalSingleton(cls):
@@ -129,6 +112,55 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
                         raise AttributeError(f"Invalid attribute {kk} for {this_cls.__name__}!")
                     setattr(self, kk, vv)
 
+            @functools.wraps(wrap_init_subclass)
+            def __init_subclass__(child_cls, *args, **kwargs):
+                # We need to ensure all derived classes behave as singletons as well.
+                if '_patched_singleton' not in child_cls.__dict__ \
+                or not child_cls._patched_singleton:
+                    _check_singleton_compatibility(child_cls)
+                    wrap_new, wrap_init, _, _ = _get_cls_functions(child_cls)
+                    child_new = child_cls.__dict__.get('__new__')
+                    child_init = child_cls.__dict__.get('__init__')
+                    # In our redefinitions, whenever we call super we have to call the super
+                    # of child_cls, not type(self), otherwise we get into an infinite loop
+                    # when the singleton is a parent of the direct parent.
+                    @functools.wraps(wrap_new)
+                    def this_new(this_cls, *args, **kwargs):
+                        if '_singleton_instance' not in this_cls.__dict__:
+                            if child_new is not None:
+                                try:
+                                    inst = child_new(this_cls, *args, **kwargs)
+                                except TypeError:
+                                    # In python 3.8 and 3.9, __new__ is a staticmethod
+                                    inst = child_new.__func__(this_cls, *args, **kwargs)
+                            else:
+                                inst = super(child_cls, this_cls).__new__(this_cls, *args, **kwargs)
+                            if not hasattr(inst, '_singleton_instance'):
+                                raise RuntimeError(f"Failed to create the singleton "
+                                                 + f"{this_cls.__name__}! Make sure that "
+                                                 + "__new__ (if defined) calls the parent "
+                                                 + " __new__ method.")
+                        return this_cls._singleton_instance
+                    child_cls.__new__ = this_new
+                    @functools.wraps(wrap_init)
+                    def this_init(self, *args, **kwargs):
+                        if not self._initialised:
+                            if child_init is not None:
+                                child_init(self, *args, **kwargs)
+                            else:
+                                super(child_cls, self).__init__(*args, **kwargs)
+                            if not hasattr(self, '_initialised') \
+                            or not self._initialised:
+                                raise RuntimeError(f"Failed to initialise the singleton "
+                                                 + f"{type(self).__name__}! Make sure "
+                                                 + "that __init__ (if defined) calls the parent "
+                                                 + "parent  __init__ method.")
+                        else:
+                            super(child_cls, self).__init__(*args, **kwargs)
+                    child_cls.__init__ = this_init
+                    child_cls._patched_singleton = True
+                super().__init_subclass__(*args, **kwargs)
+
             if cls.__dict__.get('__str__') is None:
                 @functools.wraps(Singleton.__str__)
                 def __str__(self):
@@ -149,26 +181,31 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
                 return super().__getattribute__(name)
 
             @classmethod
-            @functools.wraps(Singleton.get_self)
-            def get_self(this_cls, **kwargs):
-                # Need to initialise in case the instance does not yet exist
-                # (to recognise the allowed fields)
-                this_cls()
-                filtered_kwargs = {key: value for key, value in kwargs.items()
-                                if hasattr(this_cls, key) \
-                                or hasattr(this_cls._singleton_instance, key)}
-                if not allow_underscore_vars_in_init:
-                    filtered_kwargs = {key: value for key, value in filtered_kwargs.items()
-                                    if not key.startswith('_')}
-                return this_cls(**filtered_kwargs)
-
-            @classmethod
             @functools.wraps(Singleton.delete)
             def delete(this_cls):
                 if '_singleton_instance' in this_cls.__dict__:
                     # Invalidate (pointers to) existing instances!
                     this_cls._singleton_instance._valid = False
                     del this_cls._singleton_instance
+
+            @classmethod
+            @functools.wraps(Singleton.get_self)
+            def get_self(this_cls, **kwargs):
+                # Need to initialise in case the instance does not yet exist
+                # (to recognise the allowed fields)
+                if '_singleton_instance' not in this_cls.__dict__:
+                    self = this_cls()
+                else:
+                    self = this_cls._singleton_instance
+                filtered_kwargs = {key: value for key, value in kwargs.items()
+                                if hasattr(this_cls, key) \
+                                or hasattr(this_cls._singleton_instance, key)}
+                if not allow_underscore_vars_in_init:
+                    filtered_kwargs = {key: value for key, value in filtered_kwargs.items()
+                                    if not key.startswith('_')}
+                for kk, vv in filtered_kwargs.items():
+                    setattr(self, kk, vv)
+                return self
 
         # Rename the original class, for clarity in the __mro__ etc
         cls.__name__ = f"{cls.__name__}Original"
@@ -181,3 +218,39 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
         return decorator_singleton
     else:
         return decorator_singleton(_cls)
+
+
+def _has_singleton_parent(cls):
+    return any(hasattr(cc, '__original_nonsingleton_class__') for cc in cls.__mro__)
+
+
+def _check_singleton_compatibility(cls):
+    # Verify any existing __init__ method only has optional values
+    original_init = cls.__dict__.get('__init__')
+    if original_init is not None and count_required_arguments(original_init) > 1:
+        raise TypeError(f"Cannot create a singleton for class {cls.__name__} with an "
+                        + f"__init__ method that has more than one required argument (only "
+                        + f"'self' is allowed)!")
+
+    # Check the class doesn't already have a get_self method
+    if cls.__dict__.get('get_self') is not None:
+        raise TypeError(f"Class {cls.__name__} provides a 'get_self' method. This is not "
+                        + "compatible with the singleton decorator!")
+
+    # Check the class doesn't already have a delete method
+    if cls.__dict__.get('delete') is not None:
+        raise TypeError(f"Class {cls.__name__} provides a 'delete' method. This is not "
+                        + "compatible with the singleton decorator!")
+
+
+def _get_cls_functions(cls):
+        # Define wrapper names
+        wrap_new = cls.__new__ if cls.__dict__.get('__new__') is not None \
+                               else Singleton.__new__
+        wrap_init = cls.__init__ if cls.__dict__.get('__init__') is not None \
+                                 else Singleton.__init__
+        wrap_init_subclass = cls.__init_subclass__ if cls.__dict__.get('__init_subclass__') is not None \
+                                 else Singleton.__init_subclass__
+        wrap_getattribute = cls.__getattribute__ if cls.__dict__.get('__getattribute__') \
+                                               is not None else Singleton.__getattribute__
+        return wrap_new, wrap_init, wrap_init_subclass, wrap_getattribute

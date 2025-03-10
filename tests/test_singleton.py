@@ -201,7 +201,7 @@ def test_singleton_grand_inheritance():
     print(flush=True)
     _assert_is_singleton(SingletonGrandChild, [child7_instance1,parent3_instance], 4, 137, 19870)
 
-    # Now delete all and start fresh, to ensure children can instantiate without parent existing.
+    # Now delete all and start fresh, to ensure children can instantiate without the parent existing.
     SingletonParent3.delete()
     assert '_singleton_instance' not in SingletonParent3.__dict__
     SingletonChild7.delete()
@@ -215,6 +215,14 @@ def test_singleton_grand_inheritance():
     child7_instance2.value2 = 987
     print(flush=True)
     _assert_is_singleton(SingletonGrandChild, [child7_instance2], 4, 137, 19870)
+
+    # Now delete all and start fresh, to ensure grandchildren can instantiate without the parent existing.
+    SingletonChild7.delete()
+    assert '_singleton_instance' not in SingletonChild7.__dict__
+    SingletonGrandChild.delete()
+    assert '_singleton_instance' not in SingletonGrandChild.__dict__
+
+    _assert_is_singleton(SingletonGrandChild, [], 4, 137, 19870)
 
 
 def _assert_is_singleton(cls, other_cls_instances, value1_init, value2_init=None, value3_init=None):
@@ -762,6 +770,7 @@ def test_singleton_with_custom_dunder_with_inheritance():
             print("In SingletonChild9 __init__")
             self.value = value
             self.test_var_init = 40
+            super().__init__()
 
         def __getattribute__(self, name):
             print("In SingletonChild9 __getattribute__")
