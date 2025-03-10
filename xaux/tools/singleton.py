@@ -113,6 +113,7 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
                     if not allow_underscore_vars_in_init and kk.startswith('_'):
                         raise AttributeError(f"Cannot set private attribute {kk} for {this_cls.__name__}! "
                                             + "Use the appropriate setter method instead. However, if you "
+                                            + "really want to be able to set this attribute in the "
                                             + "constructor, use 'allow_underscore_vars_in_init=True' "
                                             + "in the singleton decorator.")
                 # Initialise the singleton if it has not been initialised yet
@@ -164,7 +165,7 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
             @classmethod
             @functools.wraps(Singleton.delete)
             def delete(this_cls):
-                if hasattr(this_cls, '_singleton_instance'):
+                if '_singleton_instance' in this_cls.__dict__:
                     # Invalidate (pointers to) existing instances!
                     this_cls._singleton_instance._valid = False
                     del this_cls._singleton_instance

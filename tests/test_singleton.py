@@ -72,6 +72,7 @@ def test_nonsingleton_inheritance():
     # Test the singleton child classes
     _assert_is_singleton(SingletonChild1, [ns_parent_instance1,ns_parent_instance2], 3, 17)
     child1_instance = SingletonChild1()
+    print(flush=True)
     _assert_is_singleton(SingletonChild2, [child1_instance,ns_parent_instance1,ns_parent_instance2], 3, -13)
 
 
@@ -97,24 +98,27 @@ def test_singleton_inheritance():
     _assert_is_singleton(SingletonParent1, [], 7)
     parent1_instance = SingletonParent1()
     parent1_instance.value1 = 989
+    print(flush=True)
     _assert_is_singleton(SingletonChild3, [parent1_instance], 7, 81)
     child3_instance1 = SingletonChild3()
     child3_instance1.value1 = 111
     child3_instance1.value2 = -333
+    print(flush=True)
     _assert_is_singleton(SingletonChild4, [child3_instance1,parent1_instance], 7, 0)
 
     # Now delete all and start fresh, to ensure children can instantiate without parent existing.
     SingletonParent1.delete()
-    assert not hasattr(SingletonParent1, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonParent1.__dict__
     SingletonChild3.delete()
-    assert not hasattr(SingletonChild3, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild3.__dict__
     SingletonChild4.delete()
-    assert not hasattr(SingletonChild4, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild4.__dict__
 
     _assert_is_singleton(SingletonChild3, [], 7, 81)
     child3_instance2 = SingletonChild3()
     child3_instance2.value1 = 111
     child3_instance2.value2 = -333
+    print(flush=True)
     _assert_is_singleton(SingletonChild4, [child3_instance2], 7, 0)
 
 
@@ -143,24 +147,27 @@ def test_double_singleton_inheritance():
     _assert_is_singleton(SingletonParent2, [], 6)
     parent2_instance = SingletonParent2()
     parent2_instance.value1 = 989
+    print(flush=True)
     _assert_is_singleton(SingletonChild5, [parent2_instance], 6, 82)
     child5_instance1 = SingletonChild5()
     child5_instance1.value1 = 222
     child5_instance1.value2 = -666
+    print(flush=True)
     _assert_is_singleton(SingletonChild6, [child5_instance1,parent2_instance], 6, -2)
 
     # Now delete all and start fresh, to ensure children can instantiate without parent existing.
     SingletonParent2.delete()
-    assert not hasattr(SingletonParent2, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonParent2.__dict__
     SingletonChild5.delete()
-    assert not hasattr(SingletonChild5, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild5.__dict__
     SingletonChild6.delete()
-    assert not hasattr(SingletonChild6, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild6.__dict__
 
-    _assert_is_singleton(SingletonChild5, [], 7, 81)
+    _assert_is_singleton(SingletonChild5, [], 6, 82)
     child5_instance2 = SingletonChild5()
     child5_instance2.value1 = 111
     child5_instance2.value2 = -333
+    print(flush=True)
     _assert_is_singleton(SingletonChild6, [child5_instance2], 6, -2)
 
 
@@ -186,24 +193,27 @@ def test_singleton_grand_inheritance():
     _assert_is_singleton(SingletonParent3, [], 4)
     parent3_instance = SingletonParent3()
     parent3_instance.value1 = 444
+    print(flush=True)
     _assert_is_singleton(SingletonChild7, [parent3_instance], 4, 137)
     child7_instance1 = SingletonChild7()
     child7_instance1.value1 = 678
     child7_instance1.value2 = -987
+    print(flush=True)
     _assert_is_singleton(SingletonGrandChild, [child7_instance1,parent3_instance], 4, 137, 19870)
 
     # Now delete all and start fresh, to ensure children can instantiate without parent existing.
     SingletonParent3.delete()
-    assert not hasattr(SingletonParent3, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonParent3.__dict__
     SingletonChild7.delete()
-    assert not hasattr(SingletonChild7, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonChild7.__dict__
     SingletonGrandChild.delete()
-    assert not hasattr(SingletonGrandChild, '_singleton_instance')
+    assert '_singleton_instance' not in SingletonGrandChild.__dict__
 
     _assert_is_singleton(SingletonChild7, [], 4, 137)
     child7_instance2 = SingletonChild7()
     child7_instance2.value1 = -678
     child7_instance2.value2 = 987
+    print(flush=True)
     _assert_is_singleton(SingletonGrandChild, [child7_instance2], 4, 137, 19870)
 
 
@@ -225,40 +235,48 @@ def _assert_is_singleton(cls, other_cls_instances, value1_init, value2_init=None
 
     def init_switch(init_type, instances, i):
         if init_type is None:
-            print(f"Initialise with default values (value1={value1_init}, value2={value2_init}, value3={value3_init})... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with default values (value1={value1_init}, value2={value2_init}, "
+                + f"value3={value3_init})... ", end='', flush=True)
             instances.insert(0, cls())
         elif init_type == '1':
             i['1'] += 1
-            print(f"Initialise with value1={value1_test_vals[i['1']]}... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]}, others default (value2="
+                + f"{value2_init}, value3={value3_init})... ", end='', flush=True)
             instances.insert(0, cls(value1=value1_test_vals[i['1']]))
         elif init_type == '2' and value2_init is not None:
             i['2'] += 1
-            print(f"Initialise with value2={value2_test_vals[i['2']]}... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with value2={value2_test_vals[i['2']]}, others default (value1="
+                + f"{value1_init}, value3={value3_init})... ", end='', flush=True)
             instances.insert(0, cls(value2=value2_test_vals[i['2']]))
         elif init_type == '3' and value3_init is not None:
             i['3'] += 1
-            print(f"Initialise with value3={value3_test_vals[i['3']]}... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with value3={value3_test_vals[i['3']]}, others default (value1="
+                + f"{value1_init}, value2={value2_init})... ", end='', flush=True)
             instances.insert(0, cls(value3=value3_test_vals[i['3']]))
         elif init_type == '12' and value2_init is not None:
             i['1'] += 1
             i['2'] += 1
-            print(f"Initialise with value1={value1_test_vals[i['1']]} and value2={value2_test_vals[i['2']]}... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]} and value2={value2_test_vals[i['2']]}, "
+                + f"others default (value3={value3_init})... ", end='', flush=True)
             instances.insert(0, cls(value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']]))
         elif init_type == '13' and value3_init is not None:
             i['1'] += 1
             i['3'] += 1
-            print(f"Initialise with value1={value1_test_vals[i['1']]} and value3={value3_test_vals[i['3']]}... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]} and value3={value3_test_vals[i['3']]}, "
+                + f"others default (value2={value2_init})... ", end='', flush=True)
             instances.insert(0, cls(value1=value1_test_vals[i['1']], value3=value3_test_vals[i['3']]))
         elif init_type == '23' and value2_init is not None and value3_init is not None:
             i['2'] += 1
             i['3'] += 1
-            print(f"Initialise with value2={value2_test_vals[i['2']]} and value3={value3_test_vals[i['3']]}... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with value2={value2_test_vals[i['2']]} and value3={value3_test_vals[i['3']]}, "
+                + f"others default (value1={value1_init})... ", end='', flush=True)
             instances.insert(0, cls(value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']]))
         elif init_type == '123' and value2_init is not None and value3_init is not None:
             i['1'] += 1
             i['2'] += 1
             i['3'] += 1
-            print(f"Initialise with value1={value1_test_vals[i['1']]}, value2={value2_test_vals[i['2']]} and value3={value3_test_vals[i['3']]}... ", end='', flush=True)
+            print(f"Initialise {cls.__name__} with value1={value1_test_vals[i['1']]}, value2={value2_test_vals[i['2']]} "
+                + f"and value3={value3_test_vals[i['3']]}... ", end='', flush=True)
             instances.insert(0, cls(value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']]))
 
     def assert_singleton(this_instance, *args, value1, value2, value3):
@@ -282,25 +300,25 @@ def _assert_is_singleton(cls, other_cls_instances, value1_init, value2_init=None
 
     def assert_and_increase_vals(instances, i):
         assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
-        print("OK")
+        print("OK", flush=True)
         i['1'] += 1
         j = 1 if len(instances) > 1 else 0
         print(f"Overwriting value1={value1_test_vals[i['1']]}... ", end='', flush=True)
         instances[j].value1 = value1_test_vals[i['1']]
         assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
-        print("OK")
+        print("OK", flush=True)
         if value2_init is not None:
             i['2'] += 1
             print(f"Overwriting value2={value2_test_vals[i['2']]}... ", end='', flush=True)
             instances[j].value2 = value2_test_vals[i['2']]
             assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
-            print("OK")
+            print("OK", flush=True)
         if value3_init is not None:
             i['3'] += 1
             print(f"Overwriting value3={value3_test_vals[i['3']]}... ", end='', flush=True)
             instances[j].value3 = value3_test_vals[i['3']]
             assert_singleton(*instances, value1=value1_test_vals[i['1']], value2=value2_test_vals[i['2']], value3=value3_test_vals[i['3']])
-            print("OK")
+            print("OK", flush=True)
 
     # Initialise with default values first, then initialise with value1, then value2, then both
     if value2_init is None and value3_init is None:
@@ -313,9 +331,9 @@ def _assert_is_singleton(cls, other_cls_instances, value1_init, value2_init=None
         print("First initialisation!   ", end='', flush=True)
         instances = []
         i = {'1': 0, '2': 0, '3': 0}
-        assert not hasattr(cls, '_singleton_instance')
+        assert '_singleton_instance' not in cls.__dict__
         init_switch(first_init_switch, instances, i)
-        assert hasattr(cls, '_singleton_instance')
+        assert '_singleton_instance' in cls.__dict__
         assert hasattr(cls._singleton_instance, '_initialised')
         assert cls._singleton_instance._initialised
         assert_and_increase_vals(instances, i)
@@ -352,19 +370,19 @@ def _assert_is_singleton(cls, other_cls_instances, value1_init, value2_init=None
             assert_and_increase_vals(instances, i)
 
         cls.delete()
-        assert not hasattr(cls, '_singleton_instance')
+        assert '_singleton_instance' not in cls.__dict__
         for inst in instances:
             with pytest.raises(RuntimeError, match=f"This instance of the singleton {cls.__name__} "
                                                   + "has been invalidated!"):
                 inst.value
-        # Double deletion should not influence
+        # Double deletion should not influence anything
         cls.delete()
-        assert not hasattr(cls, '_singleton_instance')
+        assert '_singleton_instance' not in cls.__dict__
         for inst in instances:
             with pytest.raises(RuntimeError, match=f"This instance of the singleton {cls.__name__} "
                                                   + "has been invalidated!"):
                 inst.value
-        print("")
+        print(flush=True)
 
 def test_get_self():
     @singleton
