@@ -6,7 +6,7 @@ do
   fi
 done
 
-for f in example_file.txt test_*.json test_*.json.lock test_cronjob.txt
+for f in example_file.txt test_*.json test_*.json.lock test_cronjob.txt default_file_?.txt
 do
   if [ -e $f ]
   then
