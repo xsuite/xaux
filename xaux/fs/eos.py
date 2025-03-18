@@ -200,6 +200,11 @@ class EosPath(FsPath, Path):
     def rmdir(self, *args, **kwargs):
         return _eos_rmdir(self.expanduser(), *args, **kwargs)
 
+    def as_posix(self, *args, **kwargs):
+        if hasattr(self, 'eos_path'):
+            return self.eos_path
+        return Path.as_posix(self, *args, **kwargs)
+
     # def glob(self, *args, **kwargs):
     #     raise NotImplementedError
 
@@ -219,9 +224,6 @@ class EosPath(FsPath, Path):
 
     def size(self, *args, **kwargs):
         return _eos_size(self.expanduser(), FsPath, *args, **kwargs)
-
-    def as_posix(self, *args, **kwargs):
-        return self.eos_path
 
 
 class EosPosixPath(EosPath, PurePosixPath):
