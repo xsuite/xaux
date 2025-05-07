@@ -177,6 +177,14 @@ class FsPath:
             raise NotADirectoryError(f"{self} is not a directory.")
         Path.rmdir(self.expanduser(), *args, **kwargs)
 
+    def __eq__(self, other):
+        other = FsPath(other).expanduser().resolve()
+        self = self.expanduser().resolve()
+        return self.as_posix() == other.as_posix()
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 
     # New methods
     # ===========
