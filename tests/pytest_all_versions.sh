@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# files="test_fs.py test_fs_api.py test_fs_afs.py test_fs_eos.py"
+#files='test_fs*.py'
 files=''
 
 for i in 8 9 10 11 12 13

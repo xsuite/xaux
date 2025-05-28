@@ -34,6 +34,7 @@ class FsPath:
     is just a regular Path object but with access to the FsPath methods.
     """
     __slots__ = ()
+    __hash__ = Path.__hash__
 
     def __new__(cls, *args):
         from .eos import EosPath, _on_eos
