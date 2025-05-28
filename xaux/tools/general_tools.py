@@ -8,8 +8,8 @@ import sys
 import atexit
 import base64
 import hashlib
-import pandas as pd
-import numpy as np
+from math import ceil
+from datetime import datetime, timezone
 
 from ..fs import FsPath
 
@@ -29,7 +29,7 @@ def timestamp(*, in_filename=False, ms=False, us=False):
     idx = -3 if ms else -7
     idx = 26 if us else idx
     form = "%Y-%m-%d_%H-%M-%S.%f" if in_filename else "%Y-%m-%d %H:%M:%S.%f"
-    return pd.Timestamp.now(tz='UTC').to_pydatetime().strftime(form)[:idx]
+    return datetime.now(tz=timezone.utc).strftime(form)[:idx]
 
 
 def ranID(*, length=12, size=1, only_alphanumeric=False):
@@ -51,7 +51,7 @@ def ranID(*, length=12, size=1, only_alphanumeric=False):
     if size > 1:
         return [ranID(length=length, only_alphanumeric=only_alphanumeric)
                 for _ in range(size)]
-    length = int(np.ceil(length/4))
+    length = int(ceil(length/4))
     if only_alphanumeric:
         ran = ''
         for _ in range(length):
