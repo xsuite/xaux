@@ -106,16 +106,12 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
     # Raise an exception if some files could not be copied
     if this_stderr:
        raise OSError(this_stderr)
-    # print(f"COPY DONE  ({int(1e3*(time.time() - t_start))}ms)")
-    # print()
-    # print()
 
     return this_stdout
 
 
 # If follow_symlinks=False, same as cp -P (hence a link is copied instead of its contents)
 def mv(*args, follow_symlinks=True, **kwargs):
-    # print("MOVE"); import time; t_start = time.time()
     stdout = cp(*args, recursive=True, follow_symlinks=follow_symlinks, **kwargs)
     # If we got here, then the copy was successful
     for arg in args[:-1]:
@@ -123,9 +119,6 @@ def mv(*args, follow_symlinks=True, **kwargs):
             arg.rmtree()
         else:
             arg.unlink()
-    # print(f"MOVE DONE  ({int(1e3*(time.time() - t_start))}ms)")
-    # print()
-    # print()
     return stdout
 
 

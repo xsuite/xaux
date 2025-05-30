@@ -161,32 +161,48 @@ class EosPath(FsPath, Path):
 
     # Overwrite Path methods
     # ======================
+    if sys.version_info >= (3, 12):
+        def exists(self, *args, follow_symlinks=True, **kwargs):
+            if self.is_symlink() and follow_symlinks:
+                return self.resolve().exists(*args, **kwargs)
+            return _eos_exists(self.expanduser(), *args, **kwargs)
 
-    def exists(self, *args, **kwargs):
-        if self.is_symlink():
-            return self.resolve().exists(*args, **kwargs)
-        return _eos_exists(self.expanduser(), *args, **kwargs)
+    else:
+        def exists(self, *args, **kwargs):
+            if self.is_symlink():
+                return self.resolve().exists(*args, **kwargs)
+            return _eos_exists(self.expanduser(), *args, **kwargs)
+
+    if sys.version_info >= (3, 13):
+        def is_file(self, *args, follow_symlinks=True, **kwargs):
+            if self.is_symlink() and follow_symlinks:
+                return self.resolve().is_file(*args, **kwargs)
+            return _eos_is_file(self.expanduser(), *args, **kwargs)
+
+        def is_dir(self, *args, follow_symlinks=True, **kwargs):
+            if self.is_symlink() and follow_symlinks:
+                return self.resolve().is_dir(*args, **kwargs)
+            return _eos_is_dir(self.expanduser(), *args, **kwargs)
+
+    else:
+        def is_file(self, *args, **kwargs):
+            if self.is_symlink():
+                return self.resolve().is_file(*args, **kwargs)
+            return _eos_is_file(self.expanduser(), *args, **kwargs)
+
+        def is_dir(self, *args, **kwargs):
+            if self.is_symlink():
+                return self.resolve().is_dir(*args, **kwargs)
+            return _eos_is_dir(self.expanduser(), *args, **kwargs)
+
+    def is_symlink(self, *args, **kwargs):
+        return _eos_is_symlink(self.expanduser(), *args, **kwargs)
 
     def stat(self, *args, **kwargs):
-        # if self.is_symlink():
-        #     return self.resolve().stat(*args, **kwargs)
         return _eos_stat(self.expanduser(), *args, **kwargs)
 
     def lstat(self, *args, **kwargs):
         return _eos_lstat(self.expanduser(), *args, **kwargs)
-
-    def is_file(self, *args, **kwargs):
-        if self.is_symlink():
-            return self.resolve().is_file(*args, **kwargs)
-        return _eos_is_file(self.expanduser(), *args, **kwargs)
-
-    def is_dir(self, *args, **kwargs):
-        if self.is_symlink():
-            return self.resolve().is_dir(*args, **kwargs)
-        return _eos_is_dir(self.expanduser(), *args, **kwargs)
-
-    def is_symlink(self, *args, **kwargs):
-        return _eos_is_symlink(self.expanduser(), *args, **kwargs)
 
     def touch(self, *args, **kwargs):
         return _eos_touch(self.expanduser(), *args, **kwargs)

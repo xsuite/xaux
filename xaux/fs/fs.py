@@ -149,34 +149,49 @@ class FsPath:
         else:
             return new_path
 
-    def is_file(self, *args, **kwargs):
-        return Path.is_file(self.expanduser(), *args, **kwargs)
+    if sys.version_info >= (3, 12):
+        def exists(self, *args, follow_symlinks=True, **kwargs):
+            if self.is_symlink(*args, **kwargs) and follow_symlinks:
+                return self.resolve(*args, **kwargs).exists(*args, **kwargs)
+            return Path.exists(self.expanduser(), follow_symlinks=follow_symlinks)
 
-    def is_dir(self, *args, **kwargs):
-        return Path.is_dir(self.expanduser(), *args, **kwargs)
+    else:
+        def exists(self, *args, **kwargs):
+            if self.is_symlink(*args, **kwargs):
+                return self.resolve(*args, **kwargs).exists(*args, **kwargs)
+            return Path.exists(self.expanduser())
+
+    if sys.version_info >= (3, 13):
+        def is_file(self, *args, follow_symlinks=True, **kwargs):
+            return Path.is_file(self.expanduser(), follow_symlinks=follow_symlinks)
+
+        def is_dir(self, *args, follow_symlinks=True, **kwargs):
+            return Path.is_dir(self.expanduser(), follow_symlinks=follow_symlinks)
+
+    else:
+        def is_file(self, *args, **kwargs):
+            return Path.is_file(self.expanduser())
+
+        def is_dir(self, *args, **kwargs):
+            return Path.is_dir(self.expanduser())
 
     def is_symlink(self, *args, **kwargs):
-        return Path.is_symlink(self.expanduser(), *args, **kwargs)
-
-    def exists(self, *args, **kwargs):
-        if self.is_symlink(*args, **kwargs):
-            return self.resolve(*args, **kwargs).exists(*args, **kwargs)
-        return Path.exists(self.expanduser(), *args, **kwargs)
+        return Path.is_symlink(self.expanduser())
 
     def symlink_to(self, target, target_is_directory=False, **kwargs):
         target = FsPath(target)
         return Path.symlink_to(self.expanduser().resolve(**kwargs), target.expanduser(),
-                               target_is_directory=target.is_dir(**kwargs), **kwargs)
+                               target_is_directory=target.is_dir(**kwargs))
 
-    def unlink(self, *args, **kwargs):
-        if not self.is_symlink(*args, **kwargs) and self.is_dir(*args, **kwargs):
+    def unlink(self, missing_ok=False, **kwargs):
+        if not self.is_symlink(**kwargs) and self.is_dir(**kwargs):
             raise IsADirectoryError(f"{self} is a directory.")
-        Path.unlink(self.expanduser(), *args, **kwargs)
+        Path.unlink(self.expanduser(), missing_ok=missing_ok)
 
     def rmdir(self, *args, **kwargs):
         if not self.is_dir(*args, **kwargs):
             raise NotADirectoryError(f"{self} is not a directory.")
-        Path.rmdir(self.expanduser(), *args, **kwargs)
+        Path.rmdir(self.expanduser())
 
     def __eq__(self, other):
         other = FsPath(other).expanduser().resolve()
