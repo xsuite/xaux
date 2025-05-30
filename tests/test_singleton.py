@@ -5,7 +5,7 @@
 
 import re
 import pytest
-import numpy as np
+from random import randrange
 
 from xaux import singleton
 
@@ -226,10 +226,9 @@ def test_singleton_grand_inheritance():
 
 
 def _assert_is_singleton(cls, other_cls_instances, value1_init, value2_init=None, value3_init=None):
-    rng = np.random.default_rng()
-    value1_test_vals = [value1_init, *rng.integers(low=-587692, high=6284724, size=10_000)]
-    value2_test_vals = [value2_init, *rng.integers(low=-587692, high=6284724, size=10_000)]
-    value3_test_vals = [value3_init, *rng.integers(low=-587692, high=6284724, size=10_000)]
+    value1_test_vals = [value1_init, *(randrange(-587692, 6284724) for _ in range(10_000))]
+    value2_test_vals = [value2_init, *(randrange(-587692, 6284724) for _ in range(10_000))]
+    value3_test_vals = [value3_init, *(randrange(-587692, 6284724) for _ in range(10_000))]
 
     # These tests are overly overly verbose and expanded, to try to catch all possible corner cases.
     # We are comparing every time again all instances to each other.
