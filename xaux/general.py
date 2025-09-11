@@ -10,5 +10,5 @@ _pkg_root = Path(__file__).parent.absolute()
 # ===================
 # Do not change
 # ===================
-__version__ = '0.3.5'
+__version__ = '0.3.6rc0'
 # ===================
