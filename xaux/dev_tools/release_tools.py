@@ -203,7 +203,7 @@ def _assert_no_open_prs(branch):
 
 def _set_dependencies(package):
     # Manually get the xsuite dependencies from the pyproject.toml file (not from PyPi as things might have changed)
-    xsuite_pkgs = ['xaux', 'xobjects', 'xdeps', 'xtrack', 'xpart', 'xfields', 'xcoll', 'xdyna', 'xboinc']
+    xsuite_pkgs = ['xaux', 'xobjects', 'xdeps', 'xtrack', 'xpart', 'xfields', 'xcoll', 'xdyna', 'xboinc', 'xwakes']
     xsuite_pkgs.remove(package)
     latest_version = {}
     for pkg in xsuite_pkgs:
@@ -212,10 +212,15 @@ def _set_dependencies(package):
         lines = fid.readlines()
     with Path("pyproject.toml").open("w") as fid:
         for line in lines:
-            if any([line.startswith(f"{pkg} =") or line.startswith(f"{pkg}=") for pkg in xsuite_pkgs]):
+            if any([pkg in line and ">=" in line for pkg in xsuite_pkgs]):
                 for pkg in xsuite_pkgs:
-                    if line.startswith(f"{pkg} ") or line.startswith(f"{pkg}="):
-                        fid.write(f'{pkg} = ">={latest_version[pkg]}"\n')
+                    if pkg in line and ">=" in line:
+                        # Bit of hackery to support both "xtrack>=0.89.3", and xaux = ">=0.3.5"
+                        parts = line.split('>=')
+                        if len(parts) != 2:
+                            raise VersionError(f"Fatal error: could not parse line {line}...")
+                        parts = [parts[0], *parts[1].split('"')]
+                        fid.write('"'.join([f"{parts[0]}>={latest_version[pkg]}", *parts[2:]]))
                         break
             else:
                 fid.write(line)
