@@ -172,15 +172,16 @@ def _parse_argv(optional_force=False):
     if error or bump is None:
         raise ValueError("Are you running CLI?\nThen this script needs exactly one argument: "
                        + "the new version number or a bump (which can be: patch, minor, major).\n"
-                       + "If running in python, please provide the argument `bump=...`.")
+                       + "If running in python, please provide the argument `bump=...`.\n"
+                      + f"Provided arguments are: {sys.argv}")
     force = False
     ignore_name = False
     for opt in options:
-        if opt == 'force'
+        if opt == 'force':
             if not optional_force:
                 raise ValueError("Cannot use option '--force'")
             force = True
-        elif opt = 'ignore-name':
+        elif opt == 'ignore-name':
             ignore_name = True
         else:
             raise ValueError("Unknown option '{opt}'")
