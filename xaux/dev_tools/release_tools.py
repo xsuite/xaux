@@ -161,7 +161,7 @@ def _parse_argv(optional_force=False):
     options = []
     bump = None
     error = False
-    for arg in sys.argv:
+    for arg in sys.argv[1:]:
         if arg.startswith('--'):
             options.append(arg[2:])
         else:
