@@ -12,13 +12,14 @@ class VersionError(OSError):
     pass
 
 
-def make_release_branch(package, bump=None, allow_major=False):
+def make_release_branch(package, bump=None, allow_major=False, ignore_name=False):
     if bump is None:
-        bump, _ = _parse_argv(optional_force=False)
+        bump, _, ignore_name = _parse_argv(optional_force=False)
 
     # Check necessary setup and installs
     assert_git_repo()
-    assert_git_repo_name(package)
+    if not ignore_name:
+        assert_git_repo_name(package)
     _assert_in_root_package_dir(package)
     assert_poetry_installed()
 
@@ -51,13 +52,14 @@ def make_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def rename_release_branch(package, bump=None, allow_major=False):
+def rename_release_branch(package, bump=None, allow_major=False, ignore_name=False):
     if bump is None:
-        bump, _ = _parse_argv(optional_force=False)
+        bump, _, ignore_name = _parse_argv(optional_force=False)
 
     # Check necessary setup and installs
     assert_git_repo()
-    assert_git_repo_name(package)
+    if not ignore_name:
+        assert_git_repo_name(package)
     _assert_in_root_package_dir(package)
     assert_poetry_installed()
 
@@ -92,13 +94,14 @@ def rename_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def make_release(package, bump=None, force=False, allow_major=False):
+def make_release(package, bump=None, force=False, allow_major=False, ignore_name=False):
     if bump is None:
-        bump, force = _parse_argv(optional_force=True)
+        bump, force, ignore_name = _parse_argv(optional_force=True)
 
     # Check necessary setup and installs
     assert_git_repo()
-    assert_git_repo_name(package)
+    if not ignore_name:
+        assert_git_repo_name(package)
     _assert_in_root_package_dir(package)
     assert_poetry_installed()
     assert_gh_installed()
@@ -155,20 +158,33 @@ def make_release(package, bump=None, force=False, allow_major=False):
 
 def _parse_argv(optional_force=False):
     # Check the script arguments
-    num_max_args = 3 if optional_force else 2
-    if len(sys.argv) < 2 or len(sys.argv) > num_max_args:
+    options = []
+    bump = None
+    error = False
+    for arg in sys.argv:
+        if arg.startswith('--'):
+            options.append(arg[2:])
+        else:
+            if bump is not None:
+                error = True
+                break
+            bump = arg
+    if error or bump is None:
         raise ValueError("Are you running CLI?\nThen this script needs exactly one argument: "
                        + "the new version number or a bump (which can be: patch, minor, major).\n"
                        + "If running in python, please provide the argument `bump=...`.")
-    bump = sys.argv[1]
     force = False
-    if optional_force and len(sys.argv) == num_max_args:
-        force = True
-        if sys.argv[1] == "--force":
-            bump = sys.argv[2]
-        elif sys.argv[2] != "--force":
-            raise ValueError("Only '--force' is allowed as an option.")
-    return bump, force
+    ignore_name = False
+    for opt in options:
+        if opt == 'force'
+            if not optional_force:
+                raise ValueError("Cannot use option '--force'")
+            force = True
+        elif opt = 'ignore-name':
+            ignore_name = True
+        else:
+            raise ValueError("Unknown option '{opt}'")
+    return bump, force, ignore_name
 
 
 def _assert_in_root_package_dir(package):
