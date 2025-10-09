@@ -4,7 +4,7 @@
 # ######################################### #
 
 from subprocess import run, TimeoutExpired
-import numpy as np
+from math import ceil
 from xaux import timestamp, ranID, get_hash, FsPath
 
 
@@ -94,27 +94,27 @@ def test_ranID():
     rans = [ranID(length=l+1) for l in range(40)]
     print(rans)
     for i, ran in enumerate(rans):
-        assert len(ran) == int(np.ceil((i+1)/4)*4)
+        assert len(ran) == int(ceil((i+1)/4)*4)
 
     rans = [ranID(length=20) for _ in range(1000)]
     for ran in rans:
         base64_safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_'
-        assert np.all([c in base64_safe for c in ran])
+        assert all([c in base64_safe for c in ran])
 
     rans = [ranID(length=20, only_alphanumeric=True) for _ in range(1000)]
     for ran in rans:
         alnum = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        assert np.all([c in alnum for c in ran])
+        assert all([c in alnum for c in ran])
 
     rans = ranID(length=20, size=1000)
     for ran in rans:
         base64_safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_'
-        assert np.all([c in base64_safe for c in ran])
+        assert all([c in base64_safe for c in ran])
 
     rans = ranID(length=20, size=1000, only_alphanumeric=True)
     for ran in rans:
         alnum = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        assert np.all([c in alnum for c in ran])
+        assert all([c in alnum for c in ran])
 
 
 def test_system_lock():

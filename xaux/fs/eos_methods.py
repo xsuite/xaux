@@ -4,6 +4,7 @@
 # ######################################### #
 
 import os
+import sys
 import stat
 from subprocess import run, PIPE, CalledProcessError
 from pathlib import Path
@@ -109,17 +110,6 @@ def is_egroup_member(egroup, verbose=False):
 # Overwrite Path methods
 # ======================
 
-def _eos_exists(path, *args, **kwargs):
-    _assert_eos_accessible("Cannot stat EOS paths.")
-    try:
-        ftype, _ = _get_type(path, *args, **kwargs)
-    except FileNotFoundError:
-        return False
-    if ftype is not None:
-        return True
-    return Path(path.eos_path).exists(*args, **kwargs)
-
-
 def _get_type(path, *args, **kwargs):
     success, result = _run_eos(['eos', 'stat', path.eos_path], mgm=path.mgm,
                         _false_if_stderr_contains='failed to stat', **kwargs)
@@ -138,6 +128,16 @@ def _get_type(path, *args, **kwargs):
             raise NotImplementedError(f"File type not known. Output:\n{result}")
     return None, None
 
+def _eos_exists(path, *args, **kwargs):
+    _assert_eos_accessible("Cannot stat EOS paths.")
+    try:
+        ftype, _ = _get_type(path, *args, **kwargs)
+    except FileNotFoundError:
+        return False
+    if ftype is not None:
+        return True
+    return Path(path.eos_path).exists()
+
 def _eos_is_file(path, *args, **kwargs):
     _assert_eos_accessible("Cannot stat EOS paths.")
     try:
@@ -146,7 +146,7 @@ def _eos_is_file(path, *args, **kwargs):
         return False
     if ftype is not None:
         return ftype == stat.S_IFREG
-    return Path.is_file(path, *args, **kwargs)
+    return Path.is_file(path)
 
 def _eos_is_dir(path, *args, **kwargs):
     _assert_eos_accessible("Cannot stat EOS paths.")
@@ -156,7 +156,7 @@ def _eos_is_dir(path, *args, **kwargs):
         return False
     if ftype is not None:
         return ftype == stat.S_IFDIR
-    return Path.is_dir(path, *args, **kwargs)
+    return Path.is_dir(path)
 
 def _eos_is_symlink(path, *args, **kwargs):
     _assert_eos_accessible("Cannot stat EOS paths.")
@@ -166,7 +166,7 @@ def _eos_is_symlink(path, *args, **kwargs):
         return False
     if ftype is not None:
         return ftype == stat.S_IFLNK
-    return Path.is_symlink(path, *args, **kwargs)
+    return Path.is_symlink(path)
 
 
 def _parse_fileinfo(fileinfo, ftype=None, st_size=None):
@@ -221,69 +221,104 @@ def _parse_fileinfo(fileinfo, ftype=None, st_size=None):
     #       st_fstype, st_rsize, st_creator, st_type, st_file_attributes, st_reparse_tag
     return make_stat_result(stat_dict)
 
-def _eos_lstat(path, *args, **kwargs):
-    _assert_eos_accessible("Cannot stat EOS paths.")
-    ftype, st_size = _get_type(path, *args, **kwargs)
-    if ftype is None:
-        return Path.lstat(path, *args, **kwargs)
-    elif ftype == stat.S_IFLNK:
-        # Special treatment: do NOT follow link
-        # Temporary solution: no way to retrieve other info currently
-        return make_stat_result({'st_mode': ftype+0o0777, 'st_size': st_size})
-    else:
-        success, result = _run_eos(['eos', 'fileinfo', path.eos_path], mgm=path.mgm,
-                           _false_if_stderr_contains='No such file or directory', **kwargs)
-        if not success:
-            return Path.lstat(path, *args, **kwargs)
+if sys.version_info >= (3, 10):
+    def _eos_lstat(path, *args, **kwargs):
+        _assert_eos_accessible("Cannot stat EOS paths.")
+        ftype, st_size = _get_type(path, *args, **kwargs)
+        if ftype is None:
+            return os.stat(path.as_posix(), follow_symlinks=False)
+        elif ftype == stat.S_IFLNK:
+            # Special treatment: do NOT follow link
+            # Temporary solution: no way to retrieve other info currently
+            return make_stat_result({'st_mode': ftype+0o0777, 'st_size': st_size})
         else:
-            if not result:
-                raise FileNotFoundError
-            return _parse_fileinfo(result, ftype, st_size)
+            success, result = _run_eos(['eos', 'fileinfo', path.eos_path], mgm=path.mgm,
+                            _false_if_stderr_contains='No such file or directory', **kwargs)
+            if not success:
+                return os.stat(path.as_posix(), follow_symlinks=False)
+            else:
+                if not result:
+                    raise FileNotFoundError
+                return _parse_fileinfo(result, ftype, st_size)
 
-def _eos_stat(path, *args, **kwargs):
-    _assert_eos_accessible("Cannot stat EOS paths.")
-    ftype, st_size = _get_type(path, *args, **kwargs)
-    # The command `eos fileinfo` automatically resolves symlinks
-    success, result = _run_eos(['eos', 'fileinfo', path.eos_path], mgm=path.mgm,
-                        _false_if_stderr_contains='No such file or directory', **kwargs)
-    if not success:
-        return Path.stat(path, *args, **kwargs)
-    if not result:
-        raise FileNotFoundError
-    return _parse_fileinfo(result, ftype)
+    def _eos_stat(path, *args, follow_symlinks=True, **kwargs):
+        _assert_eos_accessible("Cannot stat EOS paths.")
+        # The command `eos fileinfo` automatically resolves symlinks
+        if not follow_symlinks:
+            return _eos_lstat(path, *args, **kwargs)
+        success, result = _run_eos(['eos', 'fileinfo', path.eos_path], mgm=path.mgm,
+                            _false_if_stderr_contains='No such file or directory', **kwargs)
+        if not success:
+            return os.stat(path, follow_symlinks=True)
+        if not result:
+            raise FileNotFoundError
+        ftype, _ = _get_type(path, *args, **kwargs)
+        return _parse_fileinfo(result, ftype)
+
+else:
+    def _eos_lstat(path, *args, **kwargs):
+        _assert_eos_accessible("Cannot stat EOS paths.")
+        ftype, st_size = _get_type(path, *args, **kwargs)
+        if ftype is None:
+            return os.lstat(path.as_posix())
+        elif ftype == stat.S_IFLNK:
+            # Special treatment: do NOT follow link
+            # Temporary solution: no way to retrieve other info currently
+            return make_stat_result({'st_mode': ftype+0o0777, 'st_size': st_size})
+        else:
+            success, result = _run_eos(['eos', 'fileinfo', path.eos_path], mgm=path.mgm,
+                            _false_if_stderr_contains='No such file or directory', **kwargs)
+            if not success:
+                return os.lstat(path.as_posix())
+            else:
+                if not result:
+                    raise FileNotFoundError
+                return _parse_fileinfo(result, ftype, st_size)
+
+    def _eos_stat(path, *args, **kwargs):
+        _assert_eos_accessible("Cannot stat EOS paths.")
+        # The command `eos fileinfo` automatically resolves symlinks
+        success, result = _run_eos(['eos', 'fileinfo', path.eos_path], mgm=path.mgm,
+                            _false_if_stderr_contains='No such file or directory', **kwargs)
+        if not success:
+            return os.stat(path.as_posix())
+        if not result:
+            raise FileNotFoundError
+        ftype, _ = _get_type(path, *args, **kwargs)
+        return _parse_fileinfo(result, ftype)
 
 
-def _eos_touch(path, *args, **kwargs):
+def _eos_touch(path, mode=0o666, exist_ok=True, **kwargs):
     _assert_eos_accessible("Cannot touch EOS paths.")
     success, result = _run_eos(['eos', 'touch', path.eos_path], mgm=path.mgm, **kwargs)
     if success:
         return result
-    return Path.touch(path, *args, **kwargs)
+    return Path.touch(path, mode=mode, exist_ok=exist_ok)
 
-def _eos_unlink(path, *args, **kwargs):
+def _eos_unlink(path, missing_ok=False, **kwargs):
     _assert_eos_accessible("Cannot unlink EOS paths.")
-    if not path.is_symlink() and path.is_dir():
+    if not path.is_symlink(**kwargs) and path.is_dir(**kwargs):
         raise IsADirectoryError(f"{path} is a directory.")
     success, result = _run_eos(['eos', 'rm', path.eos_path], mgm=path.mgm, **kwargs)
     if success:
         return result
-    return Path.unlink(path, *args, **kwargs)
+    return Path.unlink(path, missing_ok=missing_ok)
 
-def _eos_mkdir(path, *args, **kwargs):
+def _eos_mkdir(path, mode=0o777, parents=False, exist_ok=False, **kwargs):
     _assert_eos_accessible("Cannot rmdir EOS paths.")
     success, result = _run_eos(['eos', 'mkdir', path.eos_path], mgm=path.mgm, **kwargs)
     if success:
         return result
-    return Path.mkdir(path, *args, **kwargs)
+    return Path.mkdir(path, mode=mode, parents=parents, exist_ok=exist_ok)
 
 def _eos_rmdir(path, *args, **kwargs):
     _assert_eos_accessible("Cannot rmdir EOS paths.")
-    if path.is_symlink() or not path.is_dir():
+    if path.is_symlink(*args, **kwargs) or not path.is_dir(*args, **kwargs):
         raise NotADirectoryError(f"{path} is not a directory.")
     success, result = _run_eos(['eos', 'rmdir', path.eos_path], mgm=path.mgm, **kwargs)
     if success:
         return result
-    return Path.rmdir(path, *args, **kwargs)
+    return Path.rmdir(path)
 
 
 # Overwrite FsPath methods

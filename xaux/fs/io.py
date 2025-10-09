@@ -35,7 +35,7 @@ from .eos_methods import _eos_mounted, _xrdcp_installed, _eoscmd_installed, _eos
 # cp file1 file2 ... link1  link points to dir1:          copies files into dir1 (potentially overwrites)
 # cp dir1 file1                                           error  "cp: -r not specified; omitting directory 'dir1'"
 # cp -r dir1 file1                                        error  "cp: cannot overwrite non-directory 'file1' with directory 'dir1'"
-# cp -r dir1 dir2           dir2 does not exist:          copies dir1 into new dir2
+# cp -r dir1 dir2           dir2 does not exist:          copies dir1 as new dir2
 # cp -r dir1 dir2           dir2 does exist:              copies dir1 inside dir2
 # links are treated as the file/dir they point to, unless -P is specified, in which case (only for links as source argument) they are treated as separate files
 
@@ -90,15 +90,15 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
 
     # t_new = time.time(); print(f"Setup done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
     # Do the copy
-    stdout, stderr = _cp_regular(sources_targets, follow_symlinks)
+    stdout, stderr = _cp_regular(sources_targets, follow_symlinks, **kwargs)
     this_stdout += stdout
     this_stderr += stderr
     # t_new = time.time(); print(f"Regular done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
-    stdout, stderr = _cp_afs(afs_sources_targets, follow_symlinks)
+    stdout, stderr = _cp_afs(afs_sources_targets, follow_symlinks, **kwargs)
     this_stdout += stdout
     this_stderr += stderr
     # t_new = time.time(); print(f"AFS done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
-    stdout, stderr = _cp_eos(eos_sources_targets, follow_symlinks)
+    stdout, stderr = _cp_eos(eos_sources_targets, follow_symlinks, **kwargs)
     this_stdout += stdout
     this_stderr += stderr
     # t_new = time.time(); print(f"EOS done ({int(1e3*(t_new-t_prev))}ms)"); t_prev = t_new
@@ -106,16 +106,12 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
     # Raise an exception if some files could not be copied
     if this_stderr:
        raise OSError(this_stderr)
-    # print(f"COPY DONE  ({int(1e3*(time.time() - t_start))}ms)")
-    # print()
-    # print()
 
     return this_stdout
 
 
 # If follow_symlinks=False, same as cp -P (hence a link is copied instead of its contents)
 def mv(*args, follow_symlinks=True, **kwargs):
-    # print("MOVE"); import time; t_start = time.time()
     stdout = cp(*args, recursive=True, follow_symlinks=follow_symlinks, **kwargs)
     # If we got here, then the copy was successful
     for arg in args[:-1]:
@@ -123,9 +119,6 @@ def mv(*args, follow_symlinks=True, **kwargs):
             arg.rmtree()
         else:
             arg.unlink()
-    # print(f"MOVE DONE  ({int(1e3*(time.time() - t_start))}ms)")
-    # print()
-    # print()
     return stdout
 
 
@@ -169,7 +162,7 @@ def _loop_sources_and_verify(sources, target):
     return src_target_recursive
 
 
-def _cp_regular(sources_targets, follow_symlinks):
+def _cp_regular(sources_targets, follow_symlinks, **kwargs):
     stdout = ""
     stderr = ""
     for src, target, recursive in sources_targets:
@@ -205,22 +198,42 @@ def _cp_regular(sources_targets, follow_symlinks):
     return stdout, stderr  # An empty error message means success
 
 
-def _cp_afs(sources_targets, follow_symlinks):
+def _cp_afs(sources_targets, follow_symlinks, method=None, **kwargs):
     from xaux.fs import _skip_afs_software, _force_xrdcp
     this_stdout = ""
     this_stderr = ""
     if _skip_afs_software:
         assert not _force_xrdcp
 
+    if method:
+        if method not in ['mount', 'xrdcp']:
+            raise ValueError(f"Invalid method '{method}' for AFS copy. "
+                           + f"Use 'mount' or 'xrdcp'.")
+        elif method == 'xrdcp':
+            if not _xrdcp_installed:
+                raise RuntimeError("xrdcp is not installed. Cannot copy "
+                                + "files to/from AFS using xrdcp.")
+            elif _skip_afs_software:
+                raise RuntimeError("Cannot copy files to/from AFS using xrdcp "
+                                + "because AFS software is skipped.")
+        elif method == 'mount':
+            if not _afs_mounted:
+                raise RuntimeError("AFS is not mounted. Cannot copy files "
+                                + "to/from AFS using mount.")
+            elif _force_xrdcp:
+                raise RuntimeError("Cannot copy files to/from AFS using mount "
+                                + "because xrdcp is forced.")
+
     # We first try to use xrdcp
-    if sources_targets and _xrdcp_installed and not _skip_afs_software:
+    if sources_targets and _xrdcp_installed and not _skip_afs_software \
+    and method != 'mount':
         sources_targets, stdout, stderr = _cp_xrdcp(sources_targets)
         this_stdout += stdout
         this_stderr += stderr
 
     # If xrdcp failed, we try to use the AFS mout
     regular_stderr = ""
-    if sources_targets:
+    if sources_targets and method != 'xrdcp':
         if _force_xrdcp:
             this_stderr += "Skipping AFS mount.\n"
             this_stderr += "Failed to copy files to AFS.\n"
@@ -242,7 +255,7 @@ def _cp_afs(sources_targets, follow_symlinks):
         return this_stdout, this_stderr + regular_stderr
 
 
-def _cp_eos(sources_targets, follow_symlinks):
+def _cp_eos(sources_targets, follow_symlinks, method=None, **kwargs):
     from xaux.fs import _skip_eos_software, _force_eoscmd, _force_xrdcp
     this_stdout = ""
     this_stderr = ""
@@ -250,21 +263,55 @@ def _cp_eos(sources_targets, follow_symlinks):
         assert not _force_eoscmd
         assert not _force_xrdcp
 
+    if method:
+        if method not in ['mount', 'xrdcp', 'eoscmd']:
+            raise ValueError(f"Invalid method '{method}' for EOS copy. "
+                           + f"Use 'mount', 'xrdcp' or 'eoscmd'.")
+        elif method == 'xrdcp':
+            if not _xrdcp_installed:
+                raise RuntimeError("xrdcp is not installed. Cannot copy "
+                                 + "files to/from EOS using xrdcp.")
+            elif _skip_eos_software:
+                raise RuntimeError("Cannot copy files to/from EOS using xrdcp "
+                                 + "because EOS software is skipped.")
+            elif _force_eoscmd:
+                raise RuntimeError("Cannot copy files to/from EOS using xrdcp "
+                                 + "because eoscmd is forced.")
+        elif method == 'eoscmd':
+            if not _eoscmd_installed:
+                raise RuntimeError("eoscmd is not installed. Cannot copy "
+                                 + "files to/from EOS using eoscmd.")
+            elif _skip_eos_software:
+                raise RuntimeError("Cannot copy files to/from EOS using eoscmd "
+                                 + "because EOS software is skipped.")
+            elif _force_xrdcp:
+                raise RuntimeError("Cannot copy files to/from EOS using eoscmd "
+                                 + "because xrdcp is forced.")
+        elif method == 'mount':
+            if not _eos_mounted:
+                raise RuntimeError("EOS is not mounted. Cannot copy files "
+                                 + "to/from EOS using mount.")
+            elif _force_xrdcp or _force_eoscmd:
+                raise RuntimeError("Cannot copy files to/from EOS using mount "
+                                 + "because xrdcp or eoscmd are forced.")
+
     # We first try to use xrdcp
-    if sources_targets and _xrdcp_installed and not _force_eoscmd and not _skip_eos_software:
+    if sources_targets and _xrdcp_installed and not _force_eoscmd and not _skip_eos_software \
+    and method != 'mount' and method != 'eoscmd':
         sources_targets, stdout, stderr = _cp_xrdcp(sources_targets)
         this_stdout += stdout
         this_stderr += stderr
 
     # If xrdcp failed, we try to use eos
-    if sources_targets and _eoscmd_installed and not _force_xrdcp and not _skip_eos_software:
+    if sources_targets and _eoscmd_installed and not _force_xrdcp and not _skip_eos_software \
+    and method != 'mount' and method != 'xrdcp':
         sources_targets, stdout, stderr = _cp_eoscmd(sources_targets)
         this_stdout += stdout
         this_stderr += stderr
 
     # If eos also failed, we try using the EOS mount
     regular_stderr = ""
-    if sources_targets:
+    if sources_targets and method != 'xrdcp' and method != 'eoscmd':
         if _force_xrdcp or _force_eoscmd:
             this_stderr += "Skipping EOS mount.\n"
             this_stderr += "Failed to copy files to EOS.\n"

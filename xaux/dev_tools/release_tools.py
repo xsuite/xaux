@@ -12,13 +12,14 @@ class VersionError(OSError):
     pass
 
 
-def make_release_branch(package, bump=None, allow_major=False):
+def make_release_branch(package, bump=None, allow_major=False, ignore_name=False):
     if bump is None:
-        bump, _ = _parse_argv(optional_force=False)
+        bump, _, ignore_name = _parse_argv(optional_force=False)
 
     # Check necessary setup and installs
     assert_git_repo()
-    assert_git_repo_name(package)
+    if not ignore_name:
+        assert_git_repo_name(package)
     _assert_in_root_package_dir(package)
     assert_poetry_installed()
 
@@ -51,13 +52,14 @@ def make_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def rename_release_branch(package, bump=None, allow_major=False):
+def rename_release_branch(package, bump=None, allow_major=False, ignore_name=False):
     if bump is None:
-        bump, _ = _parse_argv(optional_force=False)
+        bump, _, ignore_name = _parse_argv(optional_force=False)
 
     # Check necessary setup and installs
     assert_git_repo()
-    assert_git_repo_name(package)
+    if not ignore_name:
+        assert_git_repo_name(package)
     _assert_in_root_package_dir(package)
     assert_poetry_installed()
 
@@ -92,13 +94,14 @@ def rename_release_branch(package, bump=None, allow_major=False):
     print("All done!")
 
 
-def make_release(package, bump=None, force=False, allow_major=False):
+def make_release(package, bump=None, force=False, allow_major=False, ignore_name=False):
     if bump is None:
-        bump, force = _parse_argv(optional_force=True)
+        bump, force, ignore_name = _parse_argv(optional_force=True)
 
     # Check necessary setup and installs
     assert_git_repo()
-    assert_git_repo_name(package)
+    if not ignore_name:
+        assert_git_repo_name(package)
     _assert_in_root_package_dir(package)
     assert_poetry_installed()
     assert_gh_installed()
@@ -155,20 +158,34 @@ def make_release(package, bump=None, force=False, allow_major=False):
 
 def _parse_argv(optional_force=False):
     # Check the script arguments
-    num_max_args = 3 if optional_force else 2
-    if len(sys.argv) < 2 or len(sys.argv) > num_max_args:
+    options = []
+    bump = None
+    error = False
+    for arg in sys.argv[1:]:
+        if arg.startswith('--'):
+            options.append(arg[2:])
+        else:
+            if bump is not None:
+                error = True
+                break
+            bump = arg
+    if error or bump is None:
         raise ValueError("Are you running CLI?\nThen this script needs exactly one argument: "
                        + "the new version number or a bump (which can be: patch, minor, major).\n"
-                       + "If running in python, please provide the argument `bump=...`.")
-    bump = sys.argv[1]
+                       + "If running in python, please provide the argument `bump=...`.\n"
+                      + f"Provided arguments are: {sys.argv}")
     force = False
-    if optional_force and len(sys.argv) == num_max_args:
-        force = True
-        if sys.argv[1] == "--force":
-            bump = sys.argv[2]
-        elif sys.argv[2] != "--force":
-            raise ValueError("Only '--force' is allowed as an option.")
-    return bump, force
+    ignore_name = False
+    for opt in options:
+        if opt == 'force':
+            if not optional_force:
+                raise ValueError("Cannot use option '--force'")
+            force = True
+        elif opt == 'ignore-name':
+            ignore_name = True
+        else:
+            raise ValueError("Unknown option '{opt}'")
+    return bump, force, ignore_name
 
 
 def _assert_in_root_package_dir(package):
@@ -203,7 +220,7 @@ def _assert_no_open_prs(branch):
 
 def _set_dependencies(package):
     # Manually get the xsuite dependencies from the pyproject.toml file (not from PyPi as things might have changed)
-    xsuite_pkgs = ['xaux', 'xobjects', 'xdeps', 'xtrack', 'xpart', 'xfields', 'xcoll', 'xdyna', 'xboinc']
+    xsuite_pkgs = ['xaux', 'xobjects', 'xdeps', 'xtrack', 'xpart', 'xfields', 'xcoll', 'xdyna', 'xboinc', 'xwakes']
     xsuite_pkgs.remove(package)
     latest_version = {}
     for pkg in xsuite_pkgs:
@@ -212,10 +229,15 @@ def _set_dependencies(package):
         lines = fid.readlines()
     with Path("pyproject.toml").open("w") as fid:
         for line in lines:
-            if any([line.startswith(f"{pkg} =") or line.startswith(f"{pkg}=") for pkg in xsuite_pkgs]):
+            if any([pkg in line and ">=" in line for pkg in xsuite_pkgs]):
                 for pkg in xsuite_pkgs:
-                    if line.startswith(f"{pkg} ") or line.startswith(f"{pkg}="):
-                        fid.write(f'{pkg} = ">={latest_version[pkg]}"\n')
+                    if pkg in line and ">=" in line:
+                        # Bit of hackery to support both "xtrack>=0.89.3", and xaux = ">=0.3.5"
+                        parts = line.split('>=')
+                        if len(parts) != 2:
+                            raise VersionError(f"Fatal error: could not parse line {line}...")
+                        parts = [parts[0], *parts[1].split('"')]
+                        fid.write('"'.join([f"{parts[0]}>={latest_version[pkg]}", *parts[2:]]))
                         break
             else:
                 fid.write(line)

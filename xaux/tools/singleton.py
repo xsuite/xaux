@@ -24,15 +24,20 @@ class Singleton:
         """This a default __repr__ method for the singleton."""
     def __getattribute__(self, name):
         """The __getattribute__ method is expanded to implement the singleton."""
+    def delete(cls):
+        """The delete() method removes the singleton and invalidates any existing instances,
+        allowing to create a new instance the next time the class is instantiated. This is
+        useful for resetting the singleton to its default values.
+        """
     def get_self(cls, **kwargs):
         """The get_self(**kwargs) method returns the singleton instance, allowing to pass
         any kwargs to the constructor, even if they are not attributes of the singleton.
         This is useful for kwargs filtering in getters or specific functions.
         """
-    def delete(cls):
-        """The delete() method removes the singleton and invalidates any existing instances,
-        allowing to create a new instance the next time the class is instantiated. This is
-        useful for resetting the singleton to its default values.
+    def filter_kwargs(cls, **kwargs):
+        """The filter_kwargs(**kwargs) method splits the kwargs into non-class kwargs and
+        class kwargs. This is useful after a call to `get_self(**kwargs)` to only keep the
+        kwargs that are not attributes of the singleton.
         """
 
 
@@ -191,21 +196,34 @@ def singleton(_cls=None, *, allow_underscore_vars_in_init=True):
             @classmethod
             @functools.wraps(Singleton.get_self)
             def get_self(this_cls, **kwargs):
+                _, filtered_kwargs = this_cls.filter_kwargs(**kwargs)
+                if '_singleton_instance' not in this_cls.__dict__:
+                    self = this_cls()
+                else:
+                    self = this_cls._singleton_instance
+                for kk, vv in filtered_kwargs.items():
+                    setattr(self, kk, vv)
+                return self
+
+            @classmethod
+            @functools.wraps(Singleton.filter_kwargs)
+            def filter_kwargs(this_cls, **kwargs):
                 # Need to initialise in case the instance does not yet exist
                 # (to recognise the allowed fields)
                 if '_singleton_instance' not in this_cls.__dict__:
                     self = this_cls()
                 else:
                     self = this_cls._singleton_instance
-                filtered_kwargs = {key: value for key, value in kwargs.items()
+                cls_kwargs = {key: value for key, value in kwargs.items()
                                 if hasattr(this_cls, key) \
                                 or hasattr(this_cls._singleton_instance, key)}
                 if not allow_underscore_vars_in_init:
-                    filtered_kwargs = {key: value for key, value in filtered_kwargs.items()
+                    cls_kwargs = {key: value for key, value in cls_kwargs.items()
                                     if not key.startswith('_')}
-                for kk, vv in filtered_kwargs.items():
-                    setattr(self, kk, vv)
-                return self
+                non_cls_kwargs = kwargs.copy()
+                for kk in cls_kwargs.keys():
+                    non_cls_kwargs.pop(kk)
+                return non_cls_kwargs, cls_kwargs
 
         # Rename the original class, for clarity in the __mro__ etc
         cls.__name__ = f"{cls.__name__}Original"

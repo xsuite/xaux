@@ -12,6 +12,19 @@ from .fs_methods import _xrdcp_installed
 
 
 _afs_path = Path('/afs')
+_afs_mounted = False
+try:
+    cmd = run(['mount'], stdout=PIPE, stderr=PIPE)
+    if cmd.returncode == 0:
+        stdout = cmd.stdout.decode('UTF-8').strip()
+        mounts = [line.split(' on ')[1].split()[0] for line in stdout if 'AFS' in line]
+        if len(mounts) == 1:
+            _afs_mounted = True
+            _afs_path = Path(mounts[0])
+        elif len(mounts) > 1:
+            raise OSError("Multiple AFS mounts detected.")
+except (CalledProcessError, FileNotFoundError):
+    pass
 
 try:
     cmd = run(['fs', '--version'], stdout=PIPE, stderr=PIPE)
