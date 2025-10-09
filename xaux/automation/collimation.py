@@ -3,7 +3,6 @@
 # Copyright (c) CERN, 2025.                 #
 # ######################################### #
 
-import numpy as np
 from pathlib import Path
 
 if __name__ == "__main__" or __name__ == "collimation":
@@ -55,7 +54,7 @@ class LossMapPencilJob(JobTemplate):
         self.colldb.install_everest_collimators(line=self.line, verbose=True)
         print('\nAperture model check after introducing collimators:')
         df_with_coll = self.line.check_aperture()
-        assert not np.any(df_with_coll.has_aperture_problem)
+        assert not any(df_with_coll.has_aperture_problem)
 
     def post_build(self, **kwargs):
         self.line.collimators.assign_optics()

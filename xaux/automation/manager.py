@@ -6,8 +6,6 @@
 import sys
 import json
 import subprocess
-import numpy as np
-import pandas as pd
 from pathlib import Path
 
 from .template import JobTemplate
@@ -254,6 +252,8 @@ class JobManager:
 
     def _job_creation(self, job_name, job_description) -> list:
         import xtrack as xt
+        import numpy as np
+        import pandas as pd
         if not self.job_specific_input_directory.exists():
             self.job_specific_input_directory.mkdir(parents=True)
         # Fix input files format in order to have only strings and save the data in files if needed
