@@ -12,7 +12,7 @@ include = ["LICENSE", "NOTICE"]
 
 
 [tool.poetry.dependencies]
-python = ">=3.8"
+python = ">=3.8,<3.15"
 
 [poetry.group.dev.dependencies]
 pytest = ">=7.3"
