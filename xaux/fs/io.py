@@ -263,7 +263,7 @@ def _cp_eos(sources_targets, follow_symlinks, method=None, **kwargs):
         assert not _force_eoscmd
         assert not _force_xrdcp
 
-    if method:
+    if sources_targets and method:
         if method not in ['mount', 'xrdcp', 'eoscmd']:
             raise ValueError(f"Invalid method '{method}' for EOS copy. "
                            + f"Use 'mount', 'xrdcp' or 'eoscmd'.")
