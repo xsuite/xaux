@@ -194,7 +194,10 @@ class FsPath:
         Path.rmdir(self.expanduser())
 
     def __eq__(self, other):
-        other = FsPath(other).expanduser().resolve()
+        try:
+            other = FsPath(other).expanduser().resolve()
+        except:
+            return False
         self = self.expanduser().resolve()
         return self.as_posix() == other.as_posix()
 
