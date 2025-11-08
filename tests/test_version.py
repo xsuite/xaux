@@ -6,5 +6,5 @@
 from xaux import __version__
 
 def test_version():
-    assert __version__ == '0.3.9'
+    assert __version__ == '0.3.10rc0'
 
