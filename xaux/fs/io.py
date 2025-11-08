@@ -205,7 +205,7 @@ def _cp_afs(sources_targets, follow_symlinks, method=None, **kwargs):
     if _skip_afs_software:
         assert not _force_xrdcp
 
-    if method:
+    if sources_targets and method:
         if method not in ['mount', 'xrdcp']:
             raise ValueError(f"Invalid method '{method}' for AFS copy. "
                            + f"Use 'mount' or 'xrdcp'.")
@@ -263,7 +263,7 @@ def _cp_eos(sources_targets, follow_symlinks, method=None, **kwargs):
         assert not _force_eoscmd
         assert not _force_xrdcp
 
-    if method:
+    if sources_targets and method:
         if method not in ['mount', 'xrdcp', 'eoscmd']:
             raise ValueError(f"Invalid method '{method}' for EOS copy. "
                            + f"Use 'mount', 'xrdcp' or 'eoscmd'.")
