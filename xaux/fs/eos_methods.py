@@ -299,6 +299,8 @@ def _eos_unlink(path, missing_ok=False, **kwargs):
     _assert_eos_accessible("Cannot unlink EOS paths.")
     if not path.is_symlink(**kwargs) and path.is_dir(**kwargs):
         raise IsADirectoryError(f"{path} is a directory.")
+    if missing_ok and not path.exists(**kwargs):
+        return
     success, result = _run_eos(['eos', 'rm', path.eos_path], mgm=path.mgm, **kwargs)
     if success:
         return result
@@ -306,6 +308,8 @@ def _eos_unlink(path, missing_ok=False, **kwargs):
 
 def _eos_mkdir(path, mode=0o777, parents=False, exist_ok=False, **kwargs):
     _assert_eos_accessible("Cannot rmdir EOS paths.")
+    if exist_ok and path.exists(**kwargs):
+        return
     success, result = _run_eos(['eos', 'mkdir', path.eos_path], mgm=path.mgm, **kwargs)
     if success:
         return result
