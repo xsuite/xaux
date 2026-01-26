@@ -31,7 +31,10 @@ def assert_git_repo_name(repo):
         if cmd.returncode != 0:
             raise GitError(f"{Path.cwd()} is not a git repository.")
         else:
-            if Path(cmd.stdout.decode('UTF-8').strip()).name != repo:
+            path = Path(cmd.stdout.decode('UTF-8').strip())
+            if path.name != repo:
+                if (path / repo).exists() and (path / 'pyproject.toml').exists():
+                    return
                 raise GitError(f"{Path.cwd()} is not in the {repo} repository.")
     except FileNotFoundError:
         raise GitError("git is not installed.")
