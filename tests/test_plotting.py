@@ -162,3 +162,50 @@ def test_fmt_string_second_arg_disambiguation_Y_fmt_not_x_Y():
     res = plot_multi(Y, "k--")
     assert res.mode == "lines"
     assert len(res.artists) == Y.shape[1]
+
+def test_ragged_Y_only_lines_defaults_x_per_curve():
+    ys = [np.linspace(0, 1, 10), np.linspace(0, 1, 17), np.linspace(0, 1, 5)]
+    res = plot_multi(ys)
+    assert res.mode == "lines"
+    assert isinstance(res.artists, list)
+    assert len(res.artists) == 3
+
+
+def test_ragged_XY_lines():
+    xs = [np.linspace(0, 1, 10), np.linspace(0, 2, 17), np.linspace(-1, 1, 5)]
+    ys = [np.sin(xs[0]), np.sin(xs[1]), np.sin(xs[2])]
+    res = plot_multi(xs, ys, lw=1.2)
+    assert res.mode == "lines"
+    assert len(res.artists) == 3
+
+
+def test_ragged_collection_mode():
+    xs = [np.linspace(0, 1, 10), np.linspace(0, 2, 17), np.linspace(-1, 1, 5)]
+    ys = [np.sin(xs[0]), np.sin(xs[1]), np.sin(xs[2])]
+    res = plot_multi(xs, ys, mode="collection", linewidths=1.0)
+    assert res.mode == "collection"
+    assert isinstance(res.artists, LineCollection)
+
+
+def test_ragged_collection_with_colorbar():
+    xs = [np.linspace(0, 1, 10), np.linspace(0, 2, 17), np.linspace(-1, 1, 5)]
+    ys = [np.sin(xs[0]), np.sin(xs[1]), np.sin(xs[2])]
+    fig, ax = plt.subplots()
+    res = plot_multi(xs, ys, ax=ax, mode="collection", add_colorbar=True)
+    assert isinstance(res.mappable, LineCollection)
+    assert len(fig.axes) >= 2
+
+
+def test_ragged_length_mismatch_raises():
+    xs = [np.linspace(0, 1, 10), np.linspace(0, 2, 17)]
+    ys = [np.linspace(0, 1, 10), np.linspace(0, 1, 16)]  # mismatch in second curve
+    with pytest.raises(ValueError, match="must have the same length"):
+        plot_multi(xs, ys)
+
+
+def test_ragged_fmt_string_suppresses_colour_warning_and_is_accepted():
+    ys = [np.linspace(0, 1, 10), np.linspace(0, 1, 17)]
+    # Should be treated as (Y, fmt) calling style, not (x, Y)
+    res = plot_multi(ys, "k--")
+    assert res.mode == "lines"
+    assert len(res.artists) == 2
