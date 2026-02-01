@@ -166,7 +166,10 @@ def plot_multi(
         Y_in = np.asarray(Y_in)
     except ValueError:
         pass
-    if isinstance(Y_in, np.ndarray) and Y_in.ndim == 2:
+    if isinstance(Y_in, np.ndarray) and Y_in.ndim == 1:
+        raise ValueError("Y must be 2D with shape (N, M). Got 1D array. "
+                         "If you have a single curve, use regular plot().")
+    elif isinstance(Y_in, np.ndarray) and Y_in.ndim == 2:
     # Rectangular
         if Y_in.ndim != 2:
             raise ValueError(f"Y must be 2D with shape (N, M). Got shape "
