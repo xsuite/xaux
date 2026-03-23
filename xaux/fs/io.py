@@ -105,7 +105,7 @@ def cp(*args, recursive=False, follow_symlinks=True, **kwargs):
 
     # Raise an exception if some files could not be copied
     if this_stderr:
-       raise OSError(this_stderr)
+        raise OSError(this_stderr)
 
     return this_stdout
 

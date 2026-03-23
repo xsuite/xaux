@@ -191,7 +191,7 @@ class ProtectFile:
         file = arg['file']
         self._file = file
         self._lock = FsPath(file.parent, file.name + '.lock').resolve()
-        self._temp = FsPath(_tempdir.name, file.name + ranID()).resolve()
+        self._temp = FsPath(_tempdir.name, file.name + ranID(only_alphanumeric=True)).resolve()
 
         # We throw potential FileNotFoundError and FileExistsError before
         # creating the temporary file
